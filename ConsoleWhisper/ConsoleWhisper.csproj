@@ -24,8 +24,12 @@
     <PackageReference Include="Xabe.FFmpeg" Version="5.2.6" />
   </ItemGroup>
 
-	<Target Name="CreateModelDirectory" AfterTargets="Build;Publish">
+	<Target Name="CreateModelDirectoryAfterBuild" AfterTargets="Build">
 		<MakeDir Directories="$(OutDir)Model" />
+	</Target>
+
+	<Target Name="CreateModelDirectoryAfterPublish" AfterTargets="Publish">
+		<MakeDir Directories="$(PublishDir)Model" />
 	</Target>
 
 </Project>
