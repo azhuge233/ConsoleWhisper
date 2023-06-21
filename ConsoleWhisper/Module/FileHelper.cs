@@ -90,7 +90,7 @@ namespace ConsoleWhisper.Module {
 		}
 
 		internal static async Task AddText(FileStream fs, TimeSpan value) {
-			byte[] info = encoder.GetBytes(value.ToString());
+			byte[] info = encoder.GetBytes(value.ToString("G"));
 			await fs.WriteAsync(info);
 		}
 
