@@ -46,7 +46,6 @@ namespace ConsoleWhisper.Module {
 				using var reader = new AudioFileReader(audioFilename);
 				var outFormat = new WaveFormat(SampleRate, reader.WaveFormat.Channels);
 				using var resampler = new MediaFoundationResampler(reader, outFormat);
-				Output.Success("OK");
 				WaveFileWriter.CreateWaveFile(newWaveFilename, resampler);
 
 				return newWaveFilename;
