@@ -8,7 +8,7 @@ namespace ConsoleWhisper.Model {
 		[Value(3)]
 		public IEnumerable<string> Files { get; set; }
 
-		[Option('m', "model", Required = false, Hidden = false, Default = "small", HelpText = "Whiper model: base, tiny, small, medium, large.")]
+		[Option('m', "model", Required = false, Hidden = false, Default = "small", HelpText = "Whisper model: base, tiny, small, medium, large.")]
 		[Value(0, Min = 0, Max = 1, Required = false)]
 		public string ModelType { get; set; }
 
@@ -16,7 +16,7 @@ namespace ConsoleWhisper.Model {
 		[Value(1, Min = 0, Max = 1, Required = false)]
 		public string OutputDir { get; set; }
 
-		[Option('g', "gpu", Required = false, Hidden = false, HelpText = "Use GPU, using CPU if not specified.")]
+		[Option('g', "gpu", Required = false, Hidden = true, HelpText = "Currently not implemented.")]
 		[Value(2, Required = false, Default = false)]
 		public bool GPU { get; set; }
 
@@ -29,7 +29,7 @@ namespace ConsoleWhisper.Model {
 				throw new ArgumentException(message: $"Whisper model type \"{ModelType}\" is not supported.");
 		}
 
-		internal const int SupportedArgumentsCount = 6;
+		internal const int SupportedArgumentsCount = 5;
 
 		private static readonly HashSet<string> SupportedModels = new() { "base", "tiny", "small", "medium", "large" };
 	}
