@@ -22,14 +22,13 @@ namespace ConsoleWhisper.Module {
 
 				int cnt = 1;
 				await foreach(var result in processor.ProcessAsync(waveFileStream)) {
-					await FileHelper.AddText(transcriptFileStream, cnt);
+					await FileHelper.AddText(transcriptFileStream, cnt++);
 					await FileHelper.AddText(transcriptFileStream, result.Start);
 					await FileHelper.AddText(transcriptFileStream, " --> ");
 					await FileHelper.AddText(transcriptFileStream, result.End);
 					await FileHelper.AddText(transcriptFileStream, "\n");
 					await FileHelper.AddText(transcriptFileStream, result.Text);
 					await FileHelper.AddText(transcriptFileStream, "\n\n");
-					cnt++;
 				}
 
 			} catch (Exception) {
