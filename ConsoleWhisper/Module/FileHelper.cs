@@ -55,7 +55,9 @@ namespace ConsoleWhisper.Module {
 		}
 
 		internal static string GetTranscriptPath(string outputDir, string filename) {
-			var transcriptName = Path.ChangeExtension(filename, SrtExtension);
+			var extension = Path.GetExtension(filename).TrimStart('.');
+			var filenameWithoutExtension = Path.GetFileNameWithoutExtension(filename);
+			var transcriptName = Path.ChangeExtension($"{filenameWithoutExtension}-{extension}", SrtExtension);
 			return Path.Combine(outputDir, transcriptName);
 		}
 
