@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Threading.Tasks;
 
 namespace ConsoleWhisper {
@@ -23,6 +24,12 @@ namespace ConsoleWhisper {
 			} catch (IOException ex) {
 				if (!string.IsNullOrEmpty(ex.Message)) Output.Error($"IO Error: {ex.Message}");
 				return;
+			} catch (HttpRequestException ex) {
+				if (!string.IsNullOrEmpty(ex.Message)) Output.Error($"Http Request Error: {ex.Message}");
+				return;
+			} catch (Exception ex) {
+				if (!string.IsNullOrEmpty(ex.Message)) Output.Error($"Unknown Error: {ex.Message}");
+				return;
 			}
 		}
 
@@ -30,10 +37,20 @@ namespace ConsoleWhisper {
 			try {
 				arg.Validate();
 
-				arg.Files = DirectoryHelper.ExpandFilePaths(arg.Files);
+				arg.ModelType = FileHelper.GetModelName(arg.ModelType);
+				arg.Files = FileHelper.ExpandFilePaths(arg.Files);
+
+				if (!FileHelper.ModelExists(arg.ModelType)) {
+					Output.Warn($"{arg.ModelType} is not found in Models directory, start downloading.");
+					await WhisperHelper.DownloadModel(arg.ModelType);
+				}
 
 				foreach (var file in arg.Files) {
-					await WaveAudioExtractor.Extract(file);
+					var mediaFilename = Path.GetFileName(file);
+					var wavFilename = await WaveAudioExtractor.Extract(file);
+					Output.Info($"Start transcribing file: {mediaFilename}");
+					await WhisperHelper.Transcribe(arg.ModelType, wavFilename, mediaFilename, arg.OutputDir);
+					FileHelper.DelFile(wavFilename);
 				}
 
 
