@@ -1,7 +1,5 @@
 ﻿using ConsoleWhisper.Model;
 using System;
-using System.IO;
-using System.Linq;
 
 namespace ConsoleWhisper.Module {
     internal static class Output {
