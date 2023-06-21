@@ -12,6 +12,7 @@
 	<PropertyGroup>
 		<AssemblyName>ConsoleWhisper</AssemblyName>
 		<Version>1.0.0</Version>
+		<Authors>azhuge233</Authors>
 	</PropertyGroup>
 	
   <ItemGroup>
