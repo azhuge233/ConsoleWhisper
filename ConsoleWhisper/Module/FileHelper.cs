@@ -35,9 +35,27 @@ namespace ConsoleWhisper.Module {
 			File.Delete(filePath);
 		}
 
+		internal static string GetTempFile() {
+			return Path.GetTempFileName();
+		}
+
 		internal static string GetTempWavFile() {
-			string tempFilename = Path.GetTempFileName();
+			string tempFilename = GetTempFile();
 			string waveFilename = Path.ChangeExtension(tempFilename, WaveExtension);
+			DelFile(tempFilename);
+			return waveFilename;
+		}
+
+		internal static string GetTempAacFile() {
+			string tempFilename = GetTempFile();
+			string waveFilename = Path.ChangeExtension(tempFilename, AacExtension);
+			DelFile(tempFilename);
+			return waveFilename;
+		}
+
+		internal static string GetTempMp3File() {
+			string tempFilename = GetTempFile();
+			string waveFilename = Path.ChangeExtension(tempFilename, Mp3Extension);
 			DelFile(tempFilename);
 			return waveFilename;
 		}
@@ -79,6 +97,8 @@ namespace ConsoleWhisper.Module {
 		private static readonly UTF8Encoding encoder = new(true);
 
 		private const string WaveExtension = "wav";
+		private const string AacExtension = "aac";
+		private const string Mp3Extension = "mp3";
 		private const string SrtExtension = "srt";
 	}
 }

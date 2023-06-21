@@ -9,7 +9,7 @@ namespace ConsoleWhisper.Module {
 	public static class AudioHelper {
 		public static async Task<string> Extract(string mediaFilename) {
 			try {
-				var waveFilename = FileHelper.GetTempWavFile();
+				var audioFilename = FileHelper.GetTempMp3File();
 
 				var mediaInfo = await FFmpeg.GetMediaInfo(mediaFilename);
 
@@ -18,10 +18,10 @@ namespace ConsoleWhisper.Module {
 					.Skip(audioStreamIndex)
 					.FirstOrDefault();
 
-				await DoConversion(audioStream, waveFilename);
+				await DoConversion(audioStream, audioFilename);
 
-				var resampledWaveFilename = Resample(waveFilename);
-				FileHelper.DelFile(waveFilename);
+				var resampledWaveFilename = Resample(audioFilename);
+				FileHelper.DelFile(audioFilename);
 
 				return resampledWaveFilename;
 			} catch (Exception) {
@@ -29,23 +29,24 @@ namespace ConsoleWhisper.Module {
 			}
 		}
 
-		private static async Task DoConversion(IAudioStream audioStream, string waveFilename) {
+		private static async Task DoConversion(IAudioStream audioStream, string audioFilename) {
 			var conversion = FFmpeg.Conversions.New();
 
 			conversion.AddStream(audioStream)
-				.SetOutputFormat(Format.wav)
-				.SetOutput(waveFilename);
+				.SetOutputFormat(Format.mp3)
+				.SetOutput(audioFilename);
 
 			await conversion.Start();
 		}
 
-		private static string Resample(string waveFilename) {
+		private static string Resample(string audioFilename) {
 			try {
 				var newWaveFilename = FileHelper.GetTempWavFile();
 
-				using var reader = new WaveFileReader(waveFilename);
+				using var reader = new AudioFileReader(audioFilename);
 				var outFormat = new WaveFormat(SampleRate, reader.WaveFormat.Channels);
 				using var resampler = new MediaFoundationResampler(reader, outFormat);
+				Output.Success("OK");
 				WaveFileWriter.CreateWaveFile(newWaveFilename, resampler);
 
 				return newWaveFilename;
