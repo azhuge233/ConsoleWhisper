@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using Xabe.FFmpeg;
 
 namespace ConsoleWhisper.Module {
-	public static class WaveAudioExtractor {
+	public static class AudioHelper {
 		public static async Task<string> Extract(string mediaFilename) {
 			try {
 				var waveFilename = FileHelper.GetTempWavFile();

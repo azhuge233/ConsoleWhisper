@@ -47,7 +47,7 @@ namespace ConsoleWhisper {
 
 				foreach (var file in arg.Files) {
 					var mediaFilename = Path.GetFileName(file);
-					var wavFilename = await WaveAudioExtractor.Extract(file);
+					var wavFilename = await AudioHelper.Extract(file);
 					Output.Info($"Start transcribing file: {mediaFilename}");
 					await WhisperHelper.Transcribe(arg.ModelType, wavFilename, mediaFilename, arg.OutputDir);
 					FileHelper.DelFile(wavFilename);
