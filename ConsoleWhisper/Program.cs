@@ -4,6 +4,7 @@ using ConsoleWhisper.Model;
 using ConsoleWhisper.Module;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -19,12 +20,17 @@ namespace ConsoleWhisper {
 			} catch (ArgumentException ex) {
 				if (!string.IsNullOrEmpty(ex.Message)) Output.Error($"Argument Error: {ex.Message}");
 				return;
+			} catch (IOException ex) {
+				if (!string.IsNullOrEmpty(ex.Message)) Output.Error($"IO Error: {ex.Message}");
+				return;
 			}
 		}
 
 		static async Task Run(Argument arg) {
 			try {
 				arg.Validate();
+
+				arg.Files = DirectoryHelper.ExpandFilePaths(arg.Files);
 
 				foreach (var file in arg.Files) {
 					await WaveAudioExtractor.Extract(file);

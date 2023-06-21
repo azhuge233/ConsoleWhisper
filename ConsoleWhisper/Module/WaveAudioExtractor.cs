@@ -1,18 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Xabe.FFmpeg;
 
 namespace ConsoleWhisper.Module {
 	public static class WaveAudioExtractor {
-		private const string WaveExtension = "wav";
-		private const int SampleRate = 16000;
-
 		public static async Task<string> Extract(string mediaFilename) {
 			try {
-				string waveFilename = GetTempWavFile();
+				string waveFilename = DirectoryHelper.GetTempWavFile();
 
 				var mediaInfo = await FFmpeg.GetMediaInfo(mediaFilename);
 
@@ -60,11 +56,6 @@ namespace ConsoleWhisper.Module {
 			return index;
 		}
 
-		private static string GetTempWavFile() { 
-			string tempFilename = Path.GetTempFileName();
-			string waveFilename = Path.ChangeExtension(tempFilename, WaveExtension);
-			File.Delete(tempFilename);
-			return waveFilename;
-		}
+		private const int SampleRate = 16000;
 	}
 }
