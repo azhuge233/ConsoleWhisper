@@ -21,7 +21,6 @@
     <PackageReference Include="NAudio" Version="2.1.0" />
     <PackageReference Include="Whisper.net" Version="1.4.5" />
     <PackageReference Include="Whisper.net.Runtime" Version="1.4.5" />
-    <PackageReference Include="Whisper.net.Runtime.Clblast" Version="1.4.5" />
     <PackageReference Include="Xabe.FFmpeg" Version="5.2.6" />
   </ItemGroup>
 
