@@ -60,7 +60,7 @@ namespace ConsoleWhisper.Module {
 		internal static async Task DownloadFFmpegandModel(Argument arg) {
 			try {
 				FFmpeg.SetExecutablesPath(AppDirectory);
-				
+
 				var tasks = new List<Task>() { 
 					Task.Run(DownloadFFmpeg),
 					Task.Run(() => DownloadModel(arg.ModelType))
@@ -138,6 +138,8 @@ namespace ConsoleWhisper.Module {
 
 		#region downloader
 		private static async Task DownloadFFmpeg() {
+			FFmpeg.SetExecutablesPath(AppDirectory);
+
 			if (!FFmpegExists()) {
 				Output.Warn($"FFmpeg not found, start downloading.");
 				await FFmpegDownloader.GetLatestVersion(FFmpegVersion.Official);
@@ -154,10 +156,13 @@ namespace ConsoleWhisper.Module {
 
 		#region Check if necessary file exists
 		private static bool ModelExists(string modelFilename) {
+			Output.Success(ModelDirectory);
 			return File.Exists(Path.Combine(ModelDirectory, modelFilename));
 		}
 
 		private static bool FFmpegExists() {
+			Output.Success(FFmpegLocation);
+			Output.Success(FFprobeLocation);
 			return File.Exists(FFmpegLocation) && File.Exists(FFprobeLocation);
 		}
 		#endregion
