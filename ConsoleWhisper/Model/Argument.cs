@@ -20,11 +20,11 @@ namespace ConsoleWhisper.Model {
 		[Value(2, Required = false)]
 		public string Language { get; set; }
 
-		[Option("only-extract", Required = false, Hidden = false, Default = false, HelpText = "Extract audio stream, without transcribing.")]
+		[Option("only-extract", Required = false, Hidden = false, Default = false, HelpText = "Extract audio stream only.")]
 		[Value(3, Required = false)]
 		public bool OnlyExtract { get; set; }
 
-		[Option("multithread", Required = false, Hidden = false, Default = false, HelpText = "Use multithreading when extracting soundtrack.")]
+		[Option("multithread", Required = false, Hidden = false, Default = false, HelpText = "Use multithread, only works for audio extraction.")]
 		[Value(4, Required = false)]
 		public bool Multithread { get; set; }
 

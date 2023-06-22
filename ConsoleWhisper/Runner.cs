@@ -110,6 +110,12 @@ namespace ConsoleWhisper {
 
 		private static async Task DoTranscribeMultithread(KeyValuePair<string, string>[] mediaWavMap, Argument arg) {
 			try {
+				/// Stress test mode
+				//var tasks = Enumerable.Range(0, mediaWavMap.Length)
+				//	.Select(i => Task.Run(() => DoTranscribe(mediaWavMap[i].Value, mediaWavMap[i].Key, i + 1, arg)));
+
+				//await Task.WhenAll(tasks);
+
 				int cnt = 1;
 				foreach (var pair in mediaWavMap) {
 					var wavFilename = pair.Value;
