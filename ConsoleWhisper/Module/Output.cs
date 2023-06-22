@@ -17,7 +17,12 @@ namespace ConsoleWhisper.Module {
             Console.WriteLine(msg);
             ResetColor();
         }
-        internal static void Success(string msg) {
+		internal static void WarnR(string msg) {
+			Console.ForegroundColor = ConsoleColor.Yellow;
+			Console.Write(msg);
+			ResetColor();
+		}
+		internal static void Success(string msg) {
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine(msg);
             ResetColor();

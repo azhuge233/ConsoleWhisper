@@ -4,8 +4,8 @@ using System.Collections.Generic;
 
 namespace ConsoleWhisper.Model {
 	public class Argument {
-		[Option('i', "input", Required = true, Hidden = false, Separator = ' ', HelpText = "Input media files.")]
-		[Value(4)]
+		[Option('i', "input", Required = true, Hidden = false, Separator = ',', HelpText = "Input media files.")]
+		[Value(5)]
 		public IEnumerable<string> Files { get; set; }
 
 		[Option('m', "model", Required = false, Hidden = false, Default = "small", HelpText = "Whisper model: base, tiny, small, medium, large.")]
@@ -24,6 +24,10 @@ namespace ConsoleWhisper.Model {
 		[Value(3, Required = false)]
 		public bool OnlyExtract { get; set; }
 
+		[Option("multithread", Required = false, Hidden = false, Default = false, HelpText = "Use multithreading when extracting soundtrack.")]
+		[Value(4, Required = false)]
+		public bool Multithread { get; set; }
+
 		//[Option('g', "gpu", Required = false, Hidden = true, HelpText = "Currently not implemented.")]
 		//[Value(2, Required = false, Default = false)]
 		//public bool GPU { get; set; }
@@ -39,7 +43,7 @@ namespace ConsoleWhisper.Model {
 				throw new ArgumentException(message: $"Language \"{Language}\" is not supported.\nCheck {LanguageLink} for available languages.");
 		}
 
-		internal const int SupportedArgumentsCount = 7;
+		internal const int SupportedArgumentsCount = 8;
 
 		private static readonly HashSet<string> SupportedModels = new() { "base", "tiny", "small", "medium", "large" };
 		private static readonly HashSet<string> SupportedLanguages = new() { "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr",

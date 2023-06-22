@@ -1,15 +1,20 @@
-﻿using System;
+﻿using ConsoleWhisper.Model;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
+using Xabe.FFmpeg;
+using Xabe.FFmpeg.Downloader;
 
 namespace ConsoleWhisper.Module {
 	internal static class FileHelper {
+		#region Directories
 		internal static readonly string AppDirectory = AppDomain.CurrentDomain.BaseDirectory;
 		internal static readonly string FFmpegLocation = Path.Combine(AppDirectory, "ffmpeg.exe");
 		internal static readonly string FFprobeLocation = Path.Combine(AppDirectory, "ffprobe.exe");
 		internal static readonly string ModelDirectory = Path.Combine(AppDirectory, "Model");
+		#endregion
 
 		internal static IEnumerable<string> ExpandFilePaths(IEnumerable<string> paths) {
 			try {
@@ -52,15 +57,20 @@ namespace ConsoleWhisper.Module {
 			return Path.Combine(outputDir, audioName);
 		}
 
-		#region Check if necessary file exists
-		internal static bool ModelExists(string modelFilename) {
-			return File.Exists(Path.Combine(ModelDirectory, modelFilename));
+		internal static async Task DownloadFFmpegandModel(Argument arg) {
+			try {
+				FFmpeg.SetExecutablesPath(AppDirectory);
+				
+				var tasks = new List<Task>() { 
+					Task.Run(DownloadFFmpeg),
+					Task.Run(() => DownloadModel(arg.ModelType))
+				};
+				
+				await Task.WhenAll(tasks);
+			} catch (Exception) {
+				throw;
+			}
 		}
-
-		internal static bool FFmpegExists() {
-			return File.Exists(FFmpegLocation) && File.Exists(FFprobeLocation);
-		}
-		#endregion
 
 		#region Get temp file name
 		internal static string GetTempFile() {
@@ -124,6 +134,32 @@ namespace ConsoleWhisper.Module {
 		private const string AacExtension = "aac";
 		private const string Mp3Extension = "mp3";
 		private const string SrtExtension = "srt";
+		#endregion
+
+		#region downloader
+		private static async Task DownloadFFmpeg() {
+			if (!FFmpegExists()) {
+				Output.Warn($"FFmpeg not found, start downloading.");
+				await FFmpegDownloader.GetLatestVersion(FFmpegVersion.Official);
+			}
+		}
+
+		private static async Task DownloadModel(string ModelType) {
+			if (!ModelExists(ModelType)) {
+				Output.Warn($"{ModelType} is not found in Models directory, start downloading.");
+				await WhisperHelper.DownloadModel(ModelType);
+			}
+		}
+		#endregion
+
+		#region Check if necessary file exists
+		private static bool ModelExists(string modelFilename) {
+			return File.Exists(Path.Combine(ModelDirectory, modelFilename));
+		}
+
+		private static bool FFmpegExists() {
+			return File.Exists(FFmpegLocation) && File.Exists(FFprobeLocation);
+		}
 		#endregion
 	}
 }
