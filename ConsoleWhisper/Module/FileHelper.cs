@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using Xabe.FFmpeg;
@@ -11,8 +12,10 @@ namespace ConsoleWhisper.Module {
 	internal static class FileHelper {
 		#region Directories
 		internal static readonly string AppDirectory = AppDomain.CurrentDomain.BaseDirectory;
-		internal static readonly string FFmpegLocation = Path.Combine(AppDirectory, "ffmpeg.exe");
-		internal static readonly string FFprobeLocation = Path.Combine(AppDirectory, "ffprobe.exe");
+		internal static readonly string FFmpegLocationWindows = Path.Combine(AppDirectory, "ffmpeg.exe");
+		internal static readonly string FFprobeLocationWindows = Path.Combine(AppDirectory, "ffprobe.exe");
+		internal static readonly string FFmpegLocationUnix = Path.Combine(AppDirectory, "ffmpeg");
+		internal static readonly string FFprobeLocationUnix = Path.Combine(AppDirectory, "ffprobe");
 		internal static readonly string ModelDirectory = Path.Combine(AppDirectory, "Model");
 		#endregion
 
@@ -138,11 +141,18 @@ namespace ConsoleWhisper.Module {
 
 		#region downloader
 		private static async Task DownloadFFmpeg() {
-			FFmpeg.SetExecutablesPath(AppDirectory);
-
 			if (!FFmpegExists()) {
 				Output.Warn($"FFmpeg not found, start downloading.");
 				await FFmpegDownloader.GetLatestVersion(FFmpegVersion.Official);
+				File.Delete("version.json");
+
+				if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
+					File.Move("ffmpeg.exe", FFmpegLocationWindows);
+					File.Move("ffprobe.exe", FFprobeLocationWindows);
+				} else {
+					File.Move("ffmpeg", FFmpegLocationUnix);
+					File.Move("ffprobe", FFprobeLocationUnix);
+				}
 			}
 		}
 
@@ -156,14 +166,14 @@ namespace ConsoleWhisper.Module {
 
 		#region Check if necessary file exists
 		private static bool ModelExists(string modelFilename) {
-			Output.Success(ModelDirectory);
 			return File.Exists(Path.Combine(ModelDirectory, modelFilename));
 		}
 
 		private static bool FFmpegExists() {
-			Output.Success(FFmpegLocation);
-			Output.Success(FFprobeLocation);
-			return File.Exists(FFmpegLocation) && File.Exists(FFprobeLocation);
+			if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+				return File.Exists(FFmpegLocationWindows) && File.Exists(FFprobeLocationWindows);
+			else 
+				return File.Exists(FFmpegLocationUnix) && File.Exists(FFprobeLocationUnix);
 		}
 		#endregion
 	}
