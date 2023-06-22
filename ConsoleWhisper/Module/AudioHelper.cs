@@ -8,7 +8,7 @@ using Xabe.FFmpeg;
 
 namespace ConsoleWhisper.Module {
 	public static class AudioHelper {
-		public static async Task<string> Extract(string outputDir, string mediaFilename, bool isOnlyExtract) {
+		public static async Task<string> Extract(string outputDir, string mediaFilename, bool isOnlyExtract = false) {
 			try {
 				var audioFilename = isOnlyExtract ? FileHelper.GetAudioPath(outputDir, mediaFilename) : FileHelper.GetTempMp3File();
 

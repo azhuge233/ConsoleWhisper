@@ -41,15 +41,15 @@ namespace ConsoleWhisper.Module {
 		internal static string GetTranscriptPath(string outputDir, string filename) {
 			var extension = Path.GetExtension(filename).TrimStart('.');
 			var filenameWithoutExtension = Path.GetFileNameWithoutExtension(filename);
-			var transcriptName = Path.ChangeExtension($"{filenameWithoutExtension}-{extension}", SrtExtension);
+			var transcriptName = Path.ChangeExtension($"{filenameWithoutExtension}-{extension}.tmp", SrtExtension);
 			return Path.Combine(outputDir, transcriptName);
 		}
 
 		internal static string GetAudioPath(string outputDir, string filename) {
 			var extension = Path.GetExtension(filename).TrimStart('.');
 			var filenameWithoutExtension = Path.GetFileNameWithoutExtension(filename);
-			var transcriptName = Path.ChangeExtension($"{filenameWithoutExtension}-{extension}", Mp3Extension);
-			return Path.Combine(outputDir, transcriptName);
+			var audioName = Path.ChangeExtension($"{filenameWithoutExtension}-{extension}.tmp", Mp3Extension);
+			return Path.Combine(outputDir, audioName);
 		}
 
 		#region Check if necessary file exists
