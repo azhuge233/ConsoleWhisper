@@ -6,7 +6,10 @@ using System.Threading.Tasks;
 
 namespace ConsoleWhisper.Module {
 	internal static class FileHelper {
-		internal static readonly string ModelDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Model");
+		internal static readonly string AppDirectory = AppDomain.CurrentDomain.BaseDirectory;
+		internal static readonly string FFmpegLocation = Path.Combine(AppDirectory, "ffmpeg.exe");
+		internal static readonly string FFprobeLocation = Path.Combine(AppDirectory, "ffprobe.exe");
+		internal static readonly string ModelDirectory = Path.Combine(AppDirectory, "Model");
 
 		internal static IEnumerable<string> ExpandFilePaths(IEnumerable<string> paths) {
 			try {
@@ -49,6 +52,16 @@ namespace ConsoleWhisper.Module {
 			return Path.Combine(outputDir, transcriptName);
 		}
 
+		#region Check if necessary file exists
+		internal static bool ModelExists(string modelFilename) {
+			return File.Exists(Path.Combine(ModelDirectory, modelFilename));
+		}
+
+		internal static bool FFmpegExists() {
+			return File.Exists(FFmpegLocation) && File.Exists(FFprobeLocation);
+		}
+		#endregion
+
 		#region Get temp file name
 		internal static string GetTempFile() {
 			return Path.GetTempFileName();
@@ -76,10 +89,7 @@ namespace ConsoleWhisper.Module {
 		}
 		#endregion
 
-		#region Whisper model related operations
-		internal static bool ModelExists(string modelFilename) { 
-			return File.Exists(Path.Combine(ModelDirectory, modelFilename));
-		}
+		#region Whisper model related
 
 		internal static string GetModelName(string modelType) {
 			return $"ggml-{modelType}.bin";
