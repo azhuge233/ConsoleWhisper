@@ -7,12 +7,12 @@ using Whisper.net.Ggml;
 
 namespace ConsoleWhisper.Module {
 	internal class WhisperHelper {
-		internal static async Task Transcribe(string modelType, string wavFilename, string mediaFilename, string outputDir) {
+		internal static async Task Transcribe(string modelType, string wavFilename, string mediaFilename, string outputDir, string language) {
 			try {
 				using var whisperFactory = WhisperFactory.FromPath(FileHelper.GetModelPath(modelType));
 
 				using var processor = whisperFactory.CreateBuilder()
-					.WithLanguage("auto")
+					.WithLanguage(language)
 					.WithPrintProgress()
 					.Build();
 

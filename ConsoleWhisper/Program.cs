@@ -48,10 +48,13 @@ namespace ConsoleWhisper {
 				int cnt = 1;
 				foreach (var file in arg.Files) {
 					var mediaFilename = Path.GetFileName(file);
-					var wavFilename = await AudioHelper.Extract(file);
-					Output.Info($"Start transcribing file #{cnt++}: {mediaFilename}");
-					await WhisperHelper.Transcribe(arg.ModelType, wavFilename, mediaFilename, arg.OutputDir);
-					FileHelper.DelFile(wavFilename);
+					var wavFilename = await AudioHelper.Extract(arg.OutputDir, file, arg.OnlyExtract);
+
+					if (!arg.OnlyExtract) {
+						Output.Info($"Start transcribing file #{cnt++}: {mediaFilename}");
+						await WhisperHelper.Transcribe(arg.ModelType, wavFilename, mediaFilename, arg.OutputDir, arg.Language);
+						FileHelper.DelFile(wavFilename);
+					}
 				}
 
 

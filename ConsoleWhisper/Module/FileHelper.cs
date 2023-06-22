@@ -35,6 +35,21 @@ namespace ConsoleWhisper.Module {
 			File.Delete(filePath);
 		}
 
+		internal static string GetTranscriptPath(string outputDir, string filename) {
+			var extension = Path.GetExtension(filename).TrimStart('.');
+			var filenameWithoutExtension = Path.GetFileNameWithoutExtension(filename);
+			var transcriptName = Path.ChangeExtension($"{filenameWithoutExtension}-{extension}", SrtExtension);
+			return Path.Combine(outputDir, transcriptName);
+		}
+
+		internal static string GetAudioPath(string outputDir, string filename) {
+			var extension = Path.GetExtension(filename).TrimStart('.');
+			var filenameWithoutExtension = Path.GetFileNameWithoutExtension(filename);
+			var transcriptName = Path.ChangeExtension($"{filenameWithoutExtension}-{extension}", Mp3Extension);
+			return Path.Combine(outputDir, transcriptName);
+		}
+
+		#region Get temp file name
 		internal static string GetTempFile() {
 			return Path.GetTempFileName();
 		}
@@ -59,7 +74,9 @@ namespace ConsoleWhisper.Module {
 			DelFile(tempFilename);
 			return waveFilename;
 		}
+		#endregion
 
+		#region Whisper model related operations
 		internal static bool ModelExists(string modelFilename) { 
 			return File.Exists(Path.Combine(ModelDirectory, modelFilename));
 		}
@@ -71,14 +88,9 @@ namespace ConsoleWhisper.Module {
 		internal static string GetModelPath(string modelType) {
 			return Path.Combine(ModelDirectory, modelType);
 		}
+		#endregion
 
-		internal static string GetTranscriptPath(string outputDir, string filename) {
-			var extension = Path.GetExtension(filename).TrimStart('.');
-			var filenameWithoutExtension = Path.GetFileNameWithoutExtension(filename);
-			var transcriptName = Path.ChangeExtension($"{filenameWithoutExtension}-{extension}", SrtExtension);
-			return Path.Combine(outputDir, transcriptName);
-		}
-
+		#region Add Text to Filestream
 		internal static async Task AddText(FileStream fs, string value) {
 			byte[] info = encoder.GetBytes(value);
 			await fs.WriteAsync(info);
@@ -93,12 +105,15 @@ namespace ConsoleWhisper.Module {
 			byte[] info = encoder.GetBytes(value.ToString("G"));
 			await fs.WriteAsync(info);
 		}
+		#endregion
 
 		private static readonly UTF8Encoding encoder = new(true);
 
+		#region Extension string
 		private const string WaveExtension = "wav";
 		private const string AacExtension = "aac";
 		private const string Mp3Extension = "mp3";
 		private const string SrtExtension = "srt";
+		#endregion
 	}
 }

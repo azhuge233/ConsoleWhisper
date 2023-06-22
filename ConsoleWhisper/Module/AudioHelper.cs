@@ -1,15 +1,16 @@
 ﻿using NAudio.Wave;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Xabe.FFmpeg;
 
 namespace ConsoleWhisper.Module {
 	public static class AudioHelper {
-		public static async Task<string> Extract(string mediaFilename) {
+		public static async Task<string> Extract(string outputDir, string mediaFilename, bool isOnlyExtract) {
 			try {
-				var audioFilename = FileHelper.GetTempMp3File();
+				var audioFilename = isOnlyExtract ? FileHelper.GetAudioPath(outputDir, mediaFilename) : FileHelper.GetTempMp3File();
 
 				var mediaInfo = await FFmpeg.GetMediaInfo(mediaFilename);
 
@@ -20,10 +21,14 @@ namespace ConsoleWhisper.Module {
 
 				await DoConversion(audioStream, audioFilename);
 
-				var resampledWaveFilename = Resample(audioFilename);
-				FileHelper.DelFile(audioFilename);
+				if (!isOnlyExtract) {
+					var resampledWaveFilename = Resample(audioFilename);
+					FileHelper.DelFile(audioFilename);
 
-				return resampledWaveFilename;
+					return resampledWaveFilename;
+				}
+
+				return audioFilename;
 			} catch (Exception) {
 				throw;
 			}
@@ -35,6 +40,8 @@ namespace ConsoleWhisper.Module {
 			conversion.AddStream(audioStream)
 				.SetOutputFormat(Format.mp3)
 				.SetOutput(audioFilename);
+
+			Output.Info($"Extracting audio to {Path.GetFileName(audioFilename)}");
 
 			await conversion.Start();
 		}
