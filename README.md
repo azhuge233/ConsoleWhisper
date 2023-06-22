@@ -3,7 +3,7 @@
 ## Usage
 
 ```pwsh
-ConsoleWhisper --help
+> ConsoleWhisper --help
   -i, --input       Required. Input media files.
   -m, --model       (Default: small) Whisper model: base, tiny, small, medium, large.
   -o, --output      (Default: current directory) Output directory.
@@ -19,10 +19,7 @@ ConsoleWhisper --help
 ### Generate .srt subtitle for videos
 
 ```pwsh
-ConsoleWhisper.exe -i .\Friends.s01.e02.mkv
-```
-
-```pwsh
+> ConsoleWhisper.exe -i .\Friends.s01.e02.mkv
 ".\Friends.s01.e02.mkv": Multiple audio stream detected.  
         - 0:  
                 Language: ukr | Title: AC3 2.0 @ 192 kbps 1+1  
@@ -40,10 +37,7 @@ whisper_full_with_state: progress =  10%
 ### Extract soundtracks from video files
 
 ```pwsh
-ConsoleWhipser -i .\*.mp4 -o .\ --multithread --only-extract
-```
-
-```pwsh
+> ConsoleWhipser -i .\*.mp4 -o .\ --multithread --only-extract
 Use multithreading will disable user input.  
 If media file has multiple soundtracks, program will extract the first one, you will NOT be able to choose.  
 If you are transcribing, make sure to have enough disk space to store the temp .wav file.  
