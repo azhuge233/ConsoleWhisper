@@ -45,7 +45,7 @@ namespace ConsoleWhisper {
 				Output.WarnR($"Use multithreading will disable user input.\n" +
 						$"If media file has multiple soundtracks, program will extract the first one, you will NOT be able to choose.\n" +
 						$"If you are transcribing, make sure to have enough disk space to store the temp .wav file.\n" +
-						$"Proceed? yes(y)/No(N)): ");
+						$"Proceed? yes(y)/No(N): ");
 
 				var confirm = Console.ReadLine().TrimEnd(Environment.NewLine.ToCharArray());
 				if (confirm.ToLower() != "y" && confirm.ToLower() != "yes") {
