@@ -8,8 +8,8 @@
   -m, --model       (Default: small) Whisper model: base, tiny, small, medium, large.
   -o, --output      (Default: current directory) Output directory.
   -l, --language    (Default: auto) Specify transcribe language.
-  --only-extract    (Default: false) Extract audio stream, without transcribing.
-  --multithread     (Default: false) Use multithreading when extracting soundtrack.
+  --only-extract    (Default: false) Extract audio stream only.
+  --multithread     (Default: false) Use multithread, only works for audio extraction.
   --help            Display this help screen.
   --version         Display version information.
 ```
@@ -41,7 +41,7 @@ whisper_full_with_state: progress =  10%
 Use multithreading will disable user input.  
 If media file has multiple soundtracks, program will extract the first one, you will NOT be able to choose.  
 If you are transcribing, make sure to have enough disk space to store the temp .wav file.  
-Proceed? yes(y)/No(N)): y  
+Proceed? yes(y)/No(N): y  
 Extracting audio to 1-mp4.mp3  
 Extracting audio to 2-mp4.mp3  
 Extracting audio to 3-mp4.mp3  
