@@ -22,16 +22,16 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
       with:
-        dotnet-version: 7.0.x
+        dotnet-version: 8.0.x
     
     - name: Publish
       shell: pwsh
       run: |
         Set-Location "$env:GITHUB_WORKSPACE"
         dotnet restore
-        dotnet publish -c Release -r linux-x64 -p:PublishDir="$env:GITHUB_WORKSPACE\Release\linux-x64" --sc
-        dotnet publish -c Release -r win-x64 -p:PublishDir="$env:GITHUB_WORKSPACE\Release\win-x64" --sc
-        dotnet publish -c Release -r osx-x64 -p:PublishDir="$env:GITHUB_WORKSPACE\Release\osx-x64" --sc
+        dotnet publish -c Release -r linux-x64 -p:PublishDir="$env:GITHUB_WORKSPACE\Release\linux-x64"
+        dotnet publish -c Release -r win-x64 -p:PublishDir="$env:GITHUB_WORKSPACE\Release\win-x64"
+        dotnet publish -c Release -r osx-x64 -p:PublishDir="$env:GITHUB_WORKSPACE\Release\osx-x64"
         Compress-Archive -Path "$env:GITHUB_WORKSPACE\Release\win-x64\" -DestinationPath "CW-win-x64.zip"
         Compress-Archive -Path "$env:GITHUB_WORKSPACE\Release\linux-x64\" -DestinationPath "CW-linux-x64.zip"
         Compress-Archive -Path "$env:GITHUB_WORKSPACE\Release\osx-x64\" -DestinationPath "CW-osx-x64.zip"
