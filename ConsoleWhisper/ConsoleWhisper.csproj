@@ -2,8 +2,9 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net7.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
 		<PublishSingleFile>true</PublishSingleFile>
+		<SelfContained>true</SelfContained>
 		<DebugType>none</DebugType>
 		<DebugSymbols>false</DebugSymbols>
 		<BuiltInComInteropSupport>true</BuiltInComInteropSupport>
