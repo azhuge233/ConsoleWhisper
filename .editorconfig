@@ -1,0 +1,4 @@
+﻿[*.cs]
+
+# CA1862: 使用 "StringComparison" 方法重载来执行不区分大小写的字符串比较
+dotnet_diagnostic.CA1862.severity = silent

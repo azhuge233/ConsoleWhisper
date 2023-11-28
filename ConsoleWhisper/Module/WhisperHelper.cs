@@ -19,6 +19,8 @@ namespace ConsoleWhisper.Module {
 				using var waveFileStream = File.OpenRead(wavFilename);
 				using var transcriptFileStream = File.OpenWrite(FileHelper.GetTranscriptPath(outputDir, mediaFilename));
 
+				Output.Info("Start transcription...");
+
 				int cnt = 1;
 				await foreach(var result in processor.ProcessAsync(waveFileStream)) {
 					await FileHelper.AddText(transcriptFileStream, cnt++);
@@ -30,6 +32,7 @@ namespace ConsoleWhisper.Module {
 					await FileHelper.AddText(transcriptFileStream, "\n\n");
 				}
 
+				Output.Info("Done.");
 			} catch (Exception) {
 				throw;
 			}
