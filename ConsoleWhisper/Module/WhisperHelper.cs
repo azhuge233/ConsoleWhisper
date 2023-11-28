@@ -46,7 +46,8 @@ namespace ConsoleWhisper.Module {
 
 		private static readonly Dictionary<string, GgmlType> ModelTypeMap = new() {
 			{ "ggml-base.bin", GgmlType.Base }, { "ggml-tiny.bin", GgmlType.Tiny }, { "ggml-small.bin", GgmlType.Small },
-			{ "ggml-medium.bin", GgmlType.Medium }, { "ggml-large.bin", GgmlType.Large }
+			{ "ggml-medium.bin", GgmlType.Medium }, { "ggml-large-v1.bin", GgmlType.LargeV1 }, { "ggml-large-v2.bin", GgmlType.LargeV2 },
+			{ "ggml-large-v3.bin", GgmlType.LargeV3 }
 		};
 	}
 }

@@ -8,7 +8,7 @@ namespace ConsoleWhisper.Model {
 		[Value(5)]
 		public IEnumerable<string> Files { get; set; }
 
-		[Option('m', "model", Required = false, Hidden = false, Default = "small", HelpText = "Whisper model: base, tiny, small, medium, large.")]
+		[Option('m', "model", Required = false, Hidden = false, Default = "small", HelpText = "Whisper model: base, tiny, small, medium, large-v1, large-v2, large-v3.")]
 		[Value(0, Min = 0, Max = 1, Required = false)]
 		public string ModelType { get; set; }
 
@@ -45,13 +45,13 @@ namespace ConsoleWhisper.Model {
 
 		internal const int SupportedArgumentsCount = 8;
 
-		private static readonly HashSet<string> SupportedModels = new() { "base", "tiny", "small", "medium", "large" };
-		private static readonly HashSet<string> SupportedLanguages = new() { "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr",
+		private static readonly HashSet<string> SupportedModels = [ "base", "tiny", "small", "medium", "large-v1", "large-v2", "large-v3" ];
+		private static readonly HashSet<string> SupportedLanguages = [ "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr",
 			"pl", "ca", "nl", "ar", "sv", "it", "id", "hi", "fi", "vi", "he", "uk", "el", "ms", "ro", "da", "hu", "ta", "no", "th", "ur",
 			"hr", "bg", "lt", "la", "mi", "ml", "cy", "sk", "te", "fa", "lv", "bn", "sr", "az", "sl", "kn", "et", "mk", "br", "eu", "is",
 			"hy", "ne", "mn", "bs", "kk", "sq", "sw", "gl", "mr", "pa", "si", "km", "sn", "yo", "so", "af", "oc", "ka", "be", "tg", "sd",
 			"gu", "am", "yi", "lo", "uz", "fo", "ht", "ps", "tk", "nn", "mt", "sa", "lb", "my", "bo", "tl", "mg", "as", "tt", "haw", "ln",
-			"ha", "ba", "jw", "su", "auto" };
+			"ha", "ba", "jw", "su", "auto" ];
 
 		private const string LanguageLink = "https://github.com/ggerganov/whisper.cpp/blob/57543c169e27312e7546d07ed0d8c6eb806ebc36/whisper.cpp#L121";
 	}
