@@ -27,11 +27,8 @@
                 Language: eng | Title: AC3 5.1 @ 640 kbps  
 Please specify the extracting audio stream index: 1  
 Extracting audio to tmp5B84.mp3  
-whisper_init_from_file_no_state: loading model from '[Application path]\Model\ggml-small.bin'  
-# Whisper outputs
-whisper_full_with_state: progress =   5%  
-whisper_full_with_state: progress =  10%
-# ...
+Start transcription...
+Done.
 ```
 
 ### Extract soundtracks from video files
