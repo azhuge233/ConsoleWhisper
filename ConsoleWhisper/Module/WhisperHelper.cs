@@ -27,9 +27,9 @@ namespace ConsoleWhisper.Module {
 					await FileHelper.AddText(transcriptFileStream, result.Start);
 					await FileHelper.AddText(transcriptFileStream, " --> ");
 					await FileHelper.AddText(transcriptFileStream, result.End);
-					await FileHelper.AddText(transcriptFileStream, "\n");
+					await FileHelper.AddText(transcriptFileStream, Environment.NewLine);
 					await FileHelper.AddText(transcriptFileStream, result.Text);
-					await FileHelper.AddText(transcriptFileStream, "\n\n");
+					await FileHelper.AddText(transcriptFileStream, $"{Environment.NewLine}{Environment.NewLine}");
 				}
 
 				Output.Info("Done.");
