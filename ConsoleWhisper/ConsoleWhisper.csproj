@@ -5,6 +5,7 @@
     <TargetFramework>net8.0</TargetFramework>
 		<PublishSingleFile>true</PublishSingleFile>
 		<SelfContained>true</SelfContained>
+		<EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
 		<DebugType>none</DebugType>
 		<DebugSymbols>false</DebugSymbols>
 		<BuiltInComInteropSupport>true</BuiltInComInteropSupport>
