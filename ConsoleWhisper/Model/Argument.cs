@@ -8,7 +8,7 @@ namespace ConsoleWhisper.Model {
 		[Value(5)]
 		public IEnumerable<string> Files { get; set; }
 
-		[Option('m', "model", Required = false, Hidden = false, Default = "small", HelpText = "Whisper model: base, tiny, small, medium, large-v1, large-v2, large-v3.")]
+		[Option('m', "model", Required = false, Hidden = false, Default = "small", HelpText = "Whisper model: base, tiny, small, medium, large-v1, large-v2, large-v3, large-v3-turbo.")]
 		[Value(0, Min = 0, Max = 1, Required = false)]
 		public string ModelType { get; set; }
 
@@ -45,7 +45,7 @@ namespace ConsoleWhisper.Model {
 
 		internal const int SupportedArgumentsCount = 8;
 
-		private static readonly HashSet<string> SupportedModels = [ "base", "tiny", "small", "medium", "large-v1", "large-v2", "large-v3" ];
+		private static readonly HashSet<string> SupportedModels = [ "base", "tiny", "small", "medium", "large-v1", "large-v2", "large-v3", "large-v3-turbo" ];
 		private static readonly HashSet<string> SupportedLanguages = [ "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr",
 			"pl", "ca", "nl", "ar", "sv", "it", "id", "hi", "fi", "vi", "he", "uk", "el", "ms", "ro", "da", "hu", "ta", "no", "th", "ur",
 			"hr", "bg", "lt", "la", "mi", "ml", "cy", "sk", "te", "fa", "lv", "bn", "sr", "az", "sl", "kn", "et", "mk", "br", "eu", "is",
