@@ -39,7 +39,7 @@ namespace ConsoleWhisper.Module {
 		}
 		internal static async Task DownloadModel(string modelType) {
 			try {
-				using var modelStream = await WhisperGgmlDownloader.GetGgmlModelAsync(ModelTypeMap[modelType]);
+				using var modelStream = await WhisperGgmlDownloader.Default.GetGgmlModelAsync(ModelTypeMap[modelType]);
 				using var fileWriter = File.OpenWrite(FileHelper.GetModelPath(modelType));
 				await modelStream.CopyToAsync(fileWriter);
 			} catch (Exception) {
