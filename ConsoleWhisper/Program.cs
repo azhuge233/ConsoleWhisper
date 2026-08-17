@@ -3,7 +3,6 @@ using ConsoleWhisper.Model;
 using ConsoleWhisper.Module;
 using System;
 using System.IO;
-using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 
@@ -15,7 +14,7 @@ namespace ConsoleWhisper {
 
 			try {
 				await parseResult.WithParsedAsync(Runner.Run);
-				parseResult.WithNotParsed(errs => Runner.Error(parseResult, errs.ToList()));
+				parseResult.WithNotParsed(errs => Runner.Error(parseResult, [.. errs]));
 			} catch (ArgumentException ex) {
 				if (!string.IsNullOrEmpty(ex.Message)) Output.Error($"Argument Error: {ex.Message}");
 				return;

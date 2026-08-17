@@ -1,5 +1,4 @@
 ﻿using ConsoleWhisper.Model;
-using NAudio.Wave;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -15,7 +14,7 @@ namespace ConsoleWhisper.Module {
 
 				var mediaInfo = await FFmpeg.GetMediaInfo(mediaFilename);
 
-				int audioStreamIndex = arg.Multithread ? 0 : GetAudioStreamIndex(mediaInfo.AudioStreams.ToList());
+				int audioStreamIndex = arg.Multithread ? 0 : GetAudioStreamIndex([.. mediaInfo.AudioStreams]);
 				var audioStream = mediaInfo.AudioStreams
 					.Skip(audioStreamIndex)
 					.FirstOrDefault();
@@ -23,7 +22,7 @@ namespace ConsoleWhisper.Module {
 				await DoConversion(audioStream, audioFilename);
 
 				if (!arg.OnlyExtract) {
-					var resampledWaveFilename = Resample(audioFilename);
+					var resampledWaveFilename = await Resample(audioFilename);
 					FileHelper.DelFile(audioFilename);
 
 					return resampledWaveFilename;
@@ -39,7 +38,7 @@ namespace ConsoleWhisper.Module {
 			var conversion = FFmpeg.Conversions.New();
 
 			conversion.AddStream(audioStream)
-				.SetOutputFormat(Format.mp3)
+				.SetOutputFormat(Format.wav)
 				.SetOutput(audioFilename);
 
 			Output.Info($"Extracting audio to {Path.GetFileName(audioFilename)}");
@@ -47,14 +46,16 @@ namespace ConsoleWhisper.Module {
 			await conversion.Start();
 		}
 
-		private static string Resample(string audioFilename) {
+		private static async Task<string> Resample(string audioFilename) {
 			try {
 				var newWaveFilename = FileHelper.GetTempWavFile();
 
-				using var reader = new AudioFileReader(audioFilename);
-				var outFormat = new WaveFormat(SampleRate, reader.WaveFormat.Channels);
-				using var resampler = new MediaFoundationResampler(reader, outFormat);
-				WaveFileWriter.CreateWaveFile(newWaveFilename, resampler);
+				// Use FFmpeg to perform resampling so the code runs on non-Windows platforms as well.
+				var conversion = FFmpeg.Conversions.New();
+				conversion.AddParameter($"-i \"{audioFilename}\" -ar {SampleRate} -ac 1 \"{newWaveFilename}\"");
+				Output.Info($"Resampling audio to {Path.GetFileName(newWaveFilename)}");
+
+				await conversion.Start();
 
 				return newWaveFilename;
 			} catch (Exception) {
