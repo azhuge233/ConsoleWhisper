@@ -18,9 +18,17 @@ namespace ConsoleWhisper.Module {
 			var audioStreams = mediaInfo.AudioStreams.ToList();
 			var audioStreamIndex = SelectAudioStreamIndex(mediaFilename, audioStreams, arg, cancellationToken);
 			var audioStream = audioStreams[audioStreamIndex];
-			Output.Info($"Using audio stream #{audioStreamIndex} ({DescribeStream(audioStream)})");
 
-			Output.Info($"Extracting audio to {Path.GetFileName(finalAudioPath ?? audioFilename)}");
+			// Parallel extractions interleave their output: prefix it so the lines stay attributable.
+			var prefix = arg.Multithread ? $"[{Path.GetFileName(mediaFilename)}] " : string.Empty;
+
+			// Only worth reporting when there was a choice (several streams) or one was requested.
+			if (audioStreams.Count > 1 || arg.AudioIndex.HasValue || !string.IsNullOrWhiteSpace(arg.AudioLang))
+				Output.Info($"{prefix}Using audio stream #{audioStreamIndex} ({DescribeStream(audioStream)})");
+
+			Output.Info(finalAudioPath is null
+				? $"{prefix}Extracting audio..."
+				: $"{prefix}Extracting audio to {Path.GetFileName(finalAudioPath)}");
 
 			// Single ffmpeg pass: stream selection, extraction and (for transcription)
 			// the resampling whisper expects, all in one conversion.
@@ -97,13 +105,13 @@ namespace ConsoleWhisper.Module {
 
 		private static int PromptForAudioStreamIndex(string mediaFilename, List<IAudioStream> audioStreams, CancellationToken cancellationToken) {
 			if (audioStreams.Count > 1) {
-				Output.Warn($"{mediaFilename}: Multiple audio stream detected.");
+				Output.Warn($"{mediaFilename}: Multiple audio streams detected.");
 				for (var index = 0; index < audioStreams.Count; index++)
 					Output.Warn($"\t- {index}:\n\t\t{DescribeStream(audioStreams[index])}");
 			}
 
 			for (var attempt = 0; attempt < MaxPromptAttempts; attempt++) {
-				Output.InfoR($"Please specify the extracting audio stream index (0-{audioStreams.Count - 1}): ");
+				Output.InfoR($"Please specify the audio stream index to extract (0-{audioStreams.Count - 1}): ");
 				var input = Console.ReadLine();
 
 				// null means no more input: either the stream ended or the user pressed Ctrl+C.
@@ -113,7 +121,7 @@ namespace ConsoleWhisper.Module {
 				if (input is not null && int.TryParse(input.Trim(), out var index) && index >= 0 && index < audioStreams.Count)
 					return index;
 
-				Output.Warn("Invalid input.");
+				Output.Warn($"Invalid input, expected a number between 0 and {audioStreams.Count - 1}.");
 			}
 
 			throw new ArgumentException(message: "No valid audio stream index was given.");
@@ -123,11 +131,18 @@ namespace ConsoleWhisper.Module {
 			string.Join(", ", audioStreams.Select((stream, index) => $"#{index}: {DescribeStream(stream)}"));
 
 		private static string DescribeStream(IAudioStream stream) {
-			var language = string.IsNullOrWhiteSpace(stream.Language) ? "unknown language" : stream.Language;
+			var language = IsKnownLanguage(stream.Language) ? stream.Language : "unknown language";
 			var title = string.IsNullOrWhiteSpace(stream.Title) ? string.Empty : $" | {stream.Title}";
 
 			return $"language: {language}{title}";
 		}
+
+		// "und" is ffmpeg's placeholder for an untagged stream, not a real language code.
+		private static bool IsKnownLanguage(string language) =>
+			!string.IsNullOrWhiteSpace(language)
+			&& !string.Equals(language, "und", StringComparison.OrdinalIgnoreCase)
+			&& !string.Equals(language, "unknown", StringComparison.OrdinalIgnoreCase)
+			&& !string.Equals(language, "??", StringComparison.OrdinalIgnoreCase);
 
 		private const int SampleRate = 16000;
 		private const int MaxPromptAttempts = 3;

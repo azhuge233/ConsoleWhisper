@@ -71,7 +71,7 @@ namespace ConsoleWhisper {
 				return HelpText.DefaultParsingErrorsHandler(result, options);
 			}, e => e);
 
-			Output.Help(helpText, errs.IsHelp(), errs.IsVersion());
+			Output.Help(helpText, errs.IsVersion());
 
 			return errs.IsHelp() || errs.IsVersion() ? ExitCode.Success : ExitCode.Fatal;
 		}
@@ -94,7 +94,7 @@ namespace ConsoleWhisper {
 				}
 			}
 
-			return ReportSummary(succeeded, failures, jobs.Count);
+			return ReportSummary(succeeded, failures, jobs.Count, arg.OnlyExtract);
 		}
 
 		private static async Task<int> DoMultithread(List<MediaJob> jobs, Argument arg, WhisperFactory whisperFactory, CancellationToken cancellationToken) {
@@ -104,9 +104,9 @@ namespace ConsoleWhisper {
 						"Multithread mode asks for a confirmation, but the program runs without an interactive terminal.\n" +
 						"Use \"-y\" / \"--yes\" to skip the confirmation.");
 
-				Output.WarnR($"Use multithreading will disable user input.\n" +
-						$"If media file has multiple soundtracks, program will extract the first one, you will NOT be able to choose.\n" +
-						$"If you are transcribing, make sure to have enough disk space to store the temp .wav file.\n" +
+				Output.WarnR($"Using multithreading disables user input.\n" +
+						$"If a media file has multiple soundtracks, the first one is extracted automatically.\n" +
+						$"Make sure there is enough disk space for the temporary .wav files.\n" +
 						$"Proceed? yes(y)/No(N): ");
 
 				var confirm = Console.ReadLine()?.Trim();
@@ -154,7 +154,7 @@ namespace ConsoleWhisper {
 				}
 			}
 
-			return ReportSummary(succeeded, failures, jobs.Count);
+			return ReportSummary(succeeded, failures, jobs.Count, arg.OnlyExtract);
 		}
 
 		private static async Task ProcessJob(MediaJob job, Argument arg, WhisperFactory whisperFactory, CancellationToken cancellationToken) {
@@ -198,15 +198,17 @@ namespace ConsoleWhisper {
 			Output.Error($"Failed: \"{mediaFilename}\" - {exception.Message}");
 		}
 
-		private static int ReportSummary(int succeeded, List<(string MediaFilename, string Message)> failures, int total) {
+		private static int ReportSummary(int succeeded, List<(string MediaFilename, string Message)> failures, int total, bool onlyExtract) {
+			var action = onlyExtract ? "extracted" : "transcribed";
+
 			if (failures.Count == 0) {
-				Output.Success($"All done: {succeeded}/{total} file(s) processed.");
+				Output.Success($"All done: {succeeded}/{total} file(s) {action}.");
 				return ExitCode.Success;
 			}
 
 			Output.Error($"Finished with failures: {succeeded} succeeded, {failures.Count} failed, {total} total.");
-			foreach (var (mediaFilename, message) in failures)
-				Output.Error($"  - \"{mediaFilename}\": {message}");
+			foreach (var (mediaFilename, _) in failures)
+				Output.Error($"  - \"{mediaFilename}\"");
 
 			return ExitCode.PartialFailure;
 		}

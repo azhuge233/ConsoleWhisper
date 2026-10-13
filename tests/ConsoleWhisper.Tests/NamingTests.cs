@@ -32,6 +32,13 @@ namespace ConsoleWhisper.Tests {
 		}
 
 		[TestMethod]
+		public void FriendlyModelNameDropsTheFileWrapper() {
+			Assert.AreEqual("tiny", FileHelper.GetFriendlyModelName("ggml-tiny.bin"));
+			Assert.AreEqual("large-v3-turbo", FileHelper.GetFriendlyModelName("ggml-large-v3-turbo.bin"));
+			Assert.AreEqual("custom", FileHelper.GetFriendlyModelName("custom"));
+		}
+
+		[TestMethod]
 		public void OutputDirDefaultsToTheMediaDirectory() {
 			var mediaPath = CreateFile("media/video.mp4");
 

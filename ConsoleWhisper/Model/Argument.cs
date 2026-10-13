@@ -28,10 +28,10 @@ namespace ConsoleWhisper.Model {
 		[Value(4, Required = false)]
 		public bool Multithread { get; set; }
 
-		[Option("audio-index", Required = false, Hidden = false, HelpText = "Audio stream index (0-based) to use, for media files with multiple audio streams.")]
+		[Option("audio-index", Required = false, Hidden = false, HelpText = "(Default: none) Audio stream index (0-based) to use, for media files with multiple audio streams.")]
 		public int? AudioIndex { get; set; }
 
-		[Option("audio-lang", Required = false, Hidden = false, HelpText = "Audio stream language to use (e.g. eng or en), for media files with multiple audio streams.")]
+		[Option("audio-lang", Required = false, Hidden = false, HelpText = "(Default: none) Audio stream language to use (e.g. eng or en), for media files with multiple audio streams.")]
 		public string AudioLang { get; set; }
 
 		[Option('y', "yes", Required = false, Hidden = false, Default = false, HelpText = "Answer yes to confirmation prompts (non-interactive use).")]

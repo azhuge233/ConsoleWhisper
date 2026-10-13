@@ -54,12 +54,25 @@ namespace ConsoleWhisper.Module {
 			// so an interrupted download never leaves a half model behind.
 			await using (var modelStream = await WhisperGgmlDownloader.Default.GetGgmlModelAsync(ModelTypeMap[modelType], cancellationToken: cancellationToken))
 			using (var fileWriter = File.Create(tempPath)) {
-				await modelStream.CopyToAsync(fileWriter, cancellationToken);
+				var totalBytes = modelStream.CanSeek ? modelStream.Length : 0;
+				var buffer = new byte[DownloadBufferSize];
+				var downloadedBytes = 0L;
+				int read;
+
+				while ((read = await modelStream.ReadAsync(buffer, cancellationToken)) > 0) {
+					await fileWriter.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+					downloadedBytes += read;
+					Output.ReportDownload("Whisper model", downloadedBytes, totalBytes);
+				}
 			}
+
+			Output.CompleteDownload("Whisper model");
 
 			cancellationToken.ThrowIfCancellationRequested();
 			File.Move(tempPath, modelPath, true);
 		}
+
+		private const int DownloadBufferSize = 1024 * 1024;
 
 		private static readonly Dictionary<string, GgmlType> ModelTypeMap = new() {
 			{ "ggml-base.bin", GgmlType.Base }, { "ggml-tiny.bin", GgmlType.Tiny }, { "ggml-small.bin", GgmlType.Small },

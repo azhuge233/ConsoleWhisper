@@ -48,14 +48,14 @@ namespace ConsoleWhisper.Module {
 
 			if (skippedDirectories.Count > 0) {
 				var label = skippedDirectories.Count == 1 ? "directory" : "directories";
-				Output.Warn($"Warning: {skippedDirectories.Count} unreadable {label} skipped: {string.Join(", ", skippedDirectories.Distinct())}");
+				Output.Warn($"{skippedDirectories.Count} unreadable {label} skipped: {string.Join(", ", skippedDirectories.Distinct())}");
 			}
 
 			if (results.Count == 0)
 				throw new NoMatchException(BuildNoMatchMessage(misses));
 
 			foreach (var miss in misses)
-				Output.Warn($"Warning: input \"{miss}\" matched no files.");
+				Output.Warn($"Input \"{miss}\" matched no files.");
 
 			results.Sort(StringComparer.OrdinalIgnoreCase);
 			return results;
@@ -192,7 +192,8 @@ namespace ConsoleWhisper.Module {
 				return;
 
 			Output.Warn("FFmpeg not found, start downloading.");
-			await FFmpegDownloader.GetLatestVersion(FFmpegVersion.Official, AppDirectory);
+			await FFmpegDownloader.GetLatestVersion(FFmpegVersion.Official, AppDirectory, new Progress<ProgressInfo>(progress => Output.ReportDownload("FFmpeg", progress.DownloadedBytes, progress.TotalBytes)));
+			Output.CompleteDownload("FFmpeg");
 		}
 
 		internal static async Task PrepareModel(string modelType, CancellationToken cancellationToken) {
@@ -201,8 +202,20 @@ namespace ConsoleWhisper.Module {
 			if (ModelExists(modelType))
 				return;
 
-			Output.Warn($"{modelType} is not found in Models directory, start downloading.");
+			Output.Warn($"Whisper model \"{GetFriendlyModelName(modelType)}\" is not found, start downloading.");
 			await WhisperHelper.DownloadModel(modelType, cancellationToken);
+		}
+
+		internal static string GetFriendlyModelName(string modelType) {
+			var name = modelType;
+
+			if (name.StartsWith("ggml-", StringComparison.OrdinalIgnoreCase))
+				name = name["ggml-".Length..];
+
+			if (name.EndsWith(".bin", StringComparison.OrdinalIgnoreCase))
+				name = name[..^4];
+
+			return name;
 		}
 
 		// A hard killed process can leave "<model>.bin.tmp" behind - TempFiles only lives for one run.
