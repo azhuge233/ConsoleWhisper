@@ -56,9 +56,9 @@ jobs:
         
         dotnet restore
         
-        dotnet publish -c Release -r linux-x64 -p:PublishDir="$env:GITHUB_WORKSPACE\Release\linux-x64"
-        dotnet publish -c Release -r win-x64 -p:PublishDir="$env:GITHUB_WORKSPACE\Release\win-x64"
-        dotnet publish -c Release -r osx-x64 -p:PublishDir="$env:GITHUB_WORKSPACE\Release\osx-x64"
+        dotnet publish ConsoleWhisper/ConsoleWhisper.csproj -c Release -r linux-x64 -p:PublishDir="$env:GITHUB_WORKSPACE\Release\linux-x64"
+        dotnet publish ConsoleWhisper/ConsoleWhisper.csproj -c Release -r win-x64 -p:PublishDir="$env:GITHUB_WORKSPACE\Release\win-x64"
+        dotnet publish ConsoleWhisper/ConsoleWhisper.csproj -c Release -r osx-x64 -p:PublishDir="$env:GITHUB_WORKSPACE\Release\osx-x64"
         
         Compress-Archive -Path "$env:GITHUB_WORKSPACE\Release\win-x64\" -DestinationPath "CW-win-x64.zip"
         Compress-Archive -Path "$env:GITHUB_WORKSPACE\Release\linux-x64\" -DestinationPath "CW-linux-x64.zip"
