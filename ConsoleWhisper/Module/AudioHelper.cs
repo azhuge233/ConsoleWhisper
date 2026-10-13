@@ -1,86 +1,135 @@
-﻿using ConsoleWhisper.Model;
+using ConsoleWhisper.Model;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Xabe.FFmpeg;
 
 namespace ConsoleWhisper.Module {
 	public static class AudioHelper {
-		public static async Task<string> Extract(string mediaFilename, Argument arg) {
-			try {
-				var audioFilename = arg.OnlyExtract ? FileHelper.GetAudioPath(arg.OutputDir, mediaFilename) : FileHelper.GetTempMp3File();
+		public static async Task<string> Extract(string mediaFilename, string outputDir, string outputBaseName, Argument arg, CancellationToken cancellationToken) {
+			var finalAudioPath = arg.OnlyExtract ? FileHelper.GetAudioPath(outputDir, outputBaseName) : null;
+			var audioFilename = finalAudioPath is null ? FileHelper.GetTempWavFile() : FileHelper.GetTempAudioPath(outputDir, outputBaseName);
 
-				var mediaInfo = await FFmpeg.GetMediaInfo(mediaFilename);
+			var mediaInfo = await FFmpeg.GetMediaInfo(mediaFilename);
 
-				int audioStreamIndex = arg.Multithread ? 0 : GetAudioStreamIndex([.. mediaInfo.AudioStreams]);
-				var audioStream = mediaInfo.AudioStreams
-					.Skip(audioStreamIndex)
-					.FirstOrDefault();
+			var audioStreams = mediaInfo.AudioStreams.ToList();
+			var audioStreamIndex = SelectAudioStreamIndex(mediaFilename, audioStreams, arg, cancellationToken);
+			var audioStream = audioStreams[audioStreamIndex];
+			Output.Info($"Using audio stream #{audioStreamIndex} ({DescribeStream(audioStream)})");
 
-				await DoConversion(audioStream, audioFilename);
+			Output.Info($"Extracting audio to {Path.GetFileName(finalAudioPath ?? audioFilename)}");
 
-				if (!arg.OnlyExtract) {
-					var resampledWaveFilename = await Resample(audioFilename);
-					FileHelper.DelFile(audioFilename);
+			// Single ffmpeg pass: stream selection, extraction and (for transcription)
+			// the resampling whisper expects, all in one conversion.
+			await ConvertToWav(audioStream, audioFilename, resampleForWhisper: finalAudioPath is null, cancellationToken);
 
-					return resampledWaveFilename;
-				}
-
+			if (finalAudioPath is null)
 				return audioFilename;
-			} catch (Exception) {
-				throw;
-			}
+
+			File.Move(audioFilename, finalAudioPath, true);
+			return finalAudioPath;
 		}
 
-		private static async Task DoConversion(IAudioStream audioStream, string audioFilename) {
+		private static async Task ConvertToWav(IAudioStream audioStream, string audioFilename, bool resampleForWhisper, CancellationToken cancellationToken) {
 			var conversion = FFmpeg.Conversions.New();
 
 			conversion.AddStream(audioStream)
 				.SetOutputFormat(Format.wav)
-				.SetOutput(audioFilename);
+				.SetOutput(audioFilename)
+				.SetOverwriteOutput(true);
 
-			Output.Info($"Extracting audio to {Path.GetFileName(audioFilename)}");
+			if (resampleForWhisper)
+				conversion.AddParameter($"-ar {SampleRate} -ac 1");
 
-			await conversion.Start();
+			await conversion.Start(cancellationToken);
+			cancellationToken.ThrowIfCancellationRequested();
 		}
 
-		private static async Task<string> Resample(string audioFilename) {
-			try {
-				var newWaveFilename = FileHelper.GetTempWavFile();
+		private static int SelectAudioStreamIndex(string mediaFilename, List<IAudioStream> audioStreams, Argument arg, CancellationToken cancellationToken) {
+			if (audioStreams.Count == 0)
+				throw new NotSupportedException(message: $"No audio stream detected in \"{mediaFilename}\".");
 
-				// Use FFmpeg to perform resampling so the code runs on non-Windows platforms as well.
-				var conversion = FFmpeg.Conversions.New();
-				conversion.AddParameter($"-i \"{audioFilename}\" -ar {SampleRate} -ac 1 \"{newWaveFilename}\"");
-				Output.Info($"Resampling audio to {Path.GetFileName(newWaveFilename)}");
+			if (arg.AudioIndex is { } requestedIndex)
+				return ValidateAudioStreamIndex(requestedIndex, audioStreams);
 
-				await conversion.Start();
+			if (!string.IsNullOrWhiteSpace(arg.AudioLang))
+				return FindAudioStreamByLanguage(mediaFilename, arg.AudioLang, audioStreams);
 
-				return newWaveFilename;
-			} catch (Exception) {
-				throw;
-			}
+			// Multithread mode never prompts: it always uses the first audio stream.
+			if (arg.Multithread || audioStreams.Count == 1)
+				return 0;
+
+			if (Console.IsInputRedirected)
+				throw new NotSupportedException(message:
+					$"\"{mediaFilename}\": multiple audio streams detected ({DescribeAudioStreams(audioStreams)}), " +
+					"but the program runs without an interactive terminal.\n" +
+					"Specify the audio stream to use with \"--audio-index <n>\" or \"--audio-lang <code>\".");
+
+			return PromptForAudioStreamIndex(mediaFilename, audioStreams, cancellationToken);
 		}
 
-		private static int GetAudioStreamIndex(List<IAudioStream> audioStreams) {
-			int index = 0, audioStreamCount = audioStreams.Count;
-
-			if (audioStreamCount < 1) throw new NotSupportedException(message: "No audio stream detected.");
-			else if (audioStreamCount > 1) {
-				Output.Warn($"{audioStreams.First().Path}: Multiple audio stream detected.");
-				for (int i = 0; i < audioStreamCount; i++)
-					Output.Warn($"\t- {i}:\n\t\tLanguage: {audioStreams[i].Language} | Title: {audioStreams[i].Title}");
-
-				Output.InfoR("Please specify the extracting audio stream index: ");
-				index = Convert.ToInt32(Console.ReadLine());
-
-				if (index > audioStreamCount - 1) throw new IndexOutOfRangeException(message: "Index is out of range.");
-			}
+		private static int ValidateAudioStreamIndex(int index, List<IAudioStream> audioStreams) {
+			if (index >= audioStreams.Count)
+				throw new ArgumentException(message: $"Audio stream index {index} is out of range, available: 0..{audioStreams.Count - 1} ({DescribeAudioStreams(audioStreams)}).");
 
 			return index;
 		}
 
+		private static int FindAudioStreamByLanguage(string mediaFilename, string requestedLanguage, List<IAudioStream> audioStreams) {
+			var matchIndex = AudioLanguage.FindMatch(requestedLanguage, audioStreams.ConvertAll(stream => stream.Language));
+
+			if (matchIndex >= 0)
+				return matchIndex;
+
+			// Nothing matched: a file with a single audio stream leaves no choice, so use it -
+			// with several streams we cannot tell which one was meant, so fail instead of guessing.
+			if (audioStreams.Count == 1) {
+				Output.Warn($"{mediaFilename}: no audio stream matches language \"{requestedLanguage}\", using the only available audio stream ({DescribeStream(audioStreams[0])}).");
+				return 0;
+			}
+
+			throw new ArgumentException(message:
+				$"No audio stream matches language \"{requestedLanguage}\", available: {DescribeAudioStreams(audioStreams)}.");
+		}
+
+		private static int PromptForAudioStreamIndex(string mediaFilename, List<IAudioStream> audioStreams, CancellationToken cancellationToken) {
+			if (audioStreams.Count > 1) {
+				Output.Warn($"{mediaFilename}: Multiple audio stream detected.");
+				for (var index = 0; index < audioStreams.Count; index++)
+					Output.Warn($"\t- {index}:\n\t\t{DescribeStream(audioStreams[index])}");
+			}
+
+			for (var attempt = 0; attempt < MaxPromptAttempts; attempt++) {
+				Output.InfoR($"Please specify the extracting audio stream index (0-{audioStreams.Count - 1}): ");
+				var input = Console.ReadLine();
+
+				// null means no more input: either the stream ended or the user pressed Ctrl+C.
+				if (input is null)
+					cancellationToken.ThrowIfCancellationRequested();
+
+				if (input is not null && int.TryParse(input.Trim(), out var index) && index >= 0 && index < audioStreams.Count)
+					return index;
+
+				Output.Warn("Invalid input.");
+			}
+
+			throw new ArgumentException(message: "No valid audio stream index was given.");
+		}
+
+		private static string DescribeAudioStreams(List<IAudioStream> audioStreams) =>
+			string.Join(", ", audioStreams.Select((stream, index) => $"#{index}: {DescribeStream(stream)}"));
+
+		private static string DescribeStream(IAudioStream stream) {
+			var language = string.IsNullOrWhiteSpace(stream.Language) ? "unknown language" : stream.Language;
+			var title = string.IsNullOrWhiteSpace(stream.Title) ? string.Empty : $" | {stream.Title}";
+
+			return $"language: {language}{title}";
+		}
+
 		private const int SampleRate = 16000;
+		private const int MaxPromptAttempts = 3;
 	}
 }

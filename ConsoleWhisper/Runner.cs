@@ -1,130 +1,232 @@
-﻿using CommandLine.Text;
+using CommandLine.Text;
 using CommandLine;
 using ConsoleWhisper.Model;
 using ConsoleWhisper.Module;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using System;
 using System.Linq;
+using Whisper.net;
 
 namespace ConsoleWhisper {
 	internal static class Runner {
-		internal static async Task Run(Argument arg) {
+		internal static async Task<int> Run(Argument arg) {
+			arg.Validate();
+
+			arg.ModelType = FileHelper.GetModelName(arg.ModelType);
+			// Resolve every output name up front, in the (sorted) input order: doing it lazily
+			// inside the parallel extraction would make the -2 / -3 assignment depend on timing.
+			var jobs = FileHelper.ExpandFilePaths(arg.Files)
+				.Select(mediaFilename => {
+					var outputDir = FileHelper.ResolveOutputDir(arg.OutputDir, mediaFilename);
+					return new MediaJob(mediaFilename, outputDir, FileHelper.GetOutputBaseName(outputDir, mediaFilename));
+				})
+				.ToList();
+
+			using var cancellation = new CancellationTokenSource();
+			ConsoleCancelEventHandler cancelHandler = (_, eventArgs) => {
+				if (cancellation.IsCancellationRequested)
+					return;
+
+				eventArgs.Cancel = true;
+				Output.Warn("Cancelling, press Ctrl+C again to exit immediately.");
+				cancellation.Cancel();
+			};
+			Console.CancelKeyPress += cancelHandler;
+
 			try {
-				arg.Validate();
+				await FileHelper.PrepareFFmpeg();
 
-				arg.ModelType = FileHelper.GetModelName(arg.ModelType);
-				var mediaFileList = FileHelper.ExpandFilePaths(arg.Files).ToList();
+				WhisperFactory whisperFactory = null;
+				try {
+					if (!arg.OnlyExtract) {
+						await FileHelper.PrepareModel(arg.ModelType, cancellation.Token);
+						whisperFactory = WhisperFactory.FromPath(FileHelper.GetModelPath(arg.ModelType));
+					}
 
-				await FileHelper.DownloadFFmpegandModel(arg);
-
-				if (arg.Multithread) {
-					await DoMultithread(mediaFileList, arg);
-				} else {
-					await DoSinglethread(mediaFileList, arg);
+					return arg.Multithread
+						? await DoMultithread(jobs, arg, whisperFactory, cancellation.Token)
+						: await DoSinglethread(jobs, arg, whisperFactory, cancellation.Token);
+				} finally {
+					whisperFactory?.Dispose();
 				}
-			} catch (Exception) {
-				throw;
+			} catch (OperationCanceledException) {
+				Output.Warn("Cancelled.");
+				return ExitCode.Cancelled;
+			} finally {
+				// Clean up before unhooking the handler: if the user presses Ctrl+C during the
+				// cleanup we want it to be seen as an ordinary (already cancelled) signal.
+				TempFiles.Cleanup();
+				Console.CancelKeyPress -= cancelHandler;
 			}
 		}
 
-		internal static void Error<T>(ParserResult<T> result, List<Error> errs) {
+		internal static int Error<T>(ParserResult<T> result, List<Error> errs) {
 			var helpText = HelpText.AutoBuild(result, options => {
 				options.AdditionalNewLineAfterOption = false;
-				options.MaximumDisplayWidth = Console.WindowWidth;
+				options.MaximumDisplayWidth = GetDisplayWidth();
 				options.AutoHelp = true;
 				options.AutoVersion = true;
 				return HelpText.DefaultParsingErrorsHandler(result, options);
 			}, e => e);
 
 			Output.Help(helpText, errs.IsHelp(), errs.IsVersion());
+
+			return errs.IsHelp() || errs.IsVersion() ? ExitCode.Success : ExitCode.Fatal;
 		}
 
-		private static async Task DoMultithread(List<string> mediaFileList, Argument arg) {
-			try {
+		private static async Task<int> DoSinglethread(List<MediaJob> jobs, Argument arg, WhisperFactory whisperFactory, CancellationToken cancellationToken) {
+			var failures = new List<(string MediaFilename, string Message)>();
+			var succeeded = 0;
+
+			foreach (var job in jobs) {
+				cancellationToken.ThrowIfCancellationRequested();
+
+				try {
+					await ProcessJob(job, arg, whisperFactory, cancellationToken);
+					succeeded++;
+				} catch (OperationCanceledException) {
+					throw;
+				} catch (Exception ex) {
+					ReportSingleFailure(job.MediaFilename, ex);
+					failures.Add((job.MediaFilename, ex.Message));
+				}
+			}
+
+			return ReportSummary(succeeded, failures, jobs.Count);
+		}
+
+		private static async Task<int> DoMultithread(List<MediaJob> jobs, Argument arg, WhisperFactory whisperFactory, CancellationToken cancellationToken) {
+			if (!arg.Yes) {
+				if (Console.IsInputRedirected)
+					throw new NotSupportedException(message:
+						"Multithread mode asks for a confirmation, but the program runs without an interactive terminal.\n" +
+						"Use \"-y\" / \"--yes\" to skip the confirmation.");
+
 				Output.WarnR($"Use multithreading will disable user input.\n" +
 						$"If media file has multiple soundtracks, program will extract the first one, you will NOT be able to choose.\n" +
 						$"If you are transcribing, make sure to have enough disk space to store the temp .wav file.\n" +
 						$"Proceed? yes(y)/No(N): ");
 
-				var confirm = Console.ReadLine().TrimEnd(Environment.NewLine.ToCharArray());
-				if (confirm.ToLower() != "y" && confirm.ToLower() != "yes") {
-					Output.Error($"Aborted.");
-					return;
+				var confirm = Console.ReadLine()?.Trim();
+
+				if (confirm is null)
+					cancellationToken.ThrowIfCancellationRequested();
+
+				if (!string.Equals(confirm, "y", StringComparison.OrdinalIgnoreCase) && !string.Equals(confirm, "yes", StringComparison.OrdinalIgnoreCase)) {
+					Output.Error("Aborted.");
+					return ExitCode.Cancelled;
 				}
+			}
 
-				var tasks = Enumerable.Range(0, mediaFileList.Count)
-							.Select(i => Task.Run(() => DoExtractMultithread(mediaFileList[i], arg)));
+			// Extraction runs ahead of transcription, so keep the number of concurrent ffmpeg
+			// processes (and of temp .wav files) bounded instead of starting one per input file.
+			using var extractionSlots = new SemaphoreSlim(MaxParallelExtractions);
 
-				var mediaWavMap = await Task.WhenAll(tasks);
+			var extractions = await Task.WhenAll(jobs.Select(async job => {
+				await extractionSlots.WaitAsync(cancellationToken);
 
-				if (!arg.OnlyExtract) {
-					await DoTranscribeMultithread(mediaWavMap, arg);
+				try {
+					return await ExtractIsolated(job, arg, cancellationToken);
+				} finally {
+					extractionSlots.Release();
 				}
-			} catch (Exception) {
-				throw;
-			}
-		}
+			}));
 
-		private static async Task DoSinglethread(List<string> mediaFileList, Argument arg) {
-			try {
-				int cnt = 1;
-				foreach (var mediaFilename in mediaFileList) {
-					var wavFilename = await DoExtract(mediaFilename, arg);
-					if (!arg.OnlyExtract) {
-						await DoTranscribe(wavFilename, mediaFilename, cnt++, arg);
-					}
+			var failures = extractions
+				.Where(extraction => extraction.WavFilename is null)
+				.Select(extraction => (extraction.Job.MediaFilename, extraction.ErrorMessage))
+				.ToList();
+			var succeeded = 0;
+
+			foreach (var extraction in extractions.Where(extraction => extraction.WavFilename is not null)) {
+				cancellationToken.ThrowIfCancellationRequested();
+
+				try {
+					await TranscribeExtractedFile(extraction, arg, whisperFactory, cancellationToken);
+					succeeded++;
+				} catch (OperationCanceledException) {
+					throw;
+				} catch (Exception ex) {
+					ReportSingleFailure(extraction.Job.MediaFilename, ex);
+					failures.Add((extraction.Job.MediaFilename, ex.Message));
 				}
-			} catch (Exception) {
-				throw;
 			}
+
+			return ReportSummary(succeeded, failures, jobs.Count);
 		}
 
-		private static async Task<string> DoExtract(string mediaFilename, Argument arg) {
-			try {
-				var wavFilename = await AudioHelper.Extract(mediaFilename, arg);
-				return wavFilename;
-			} catch (Exception) {
-				throw;
-			}
-		}
+		private static async Task ProcessJob(MediaJob job, Argument arg, WhisperFactory whisperFactory, CancellationToken cancellationToken) {
+			var wavFilename = await AudioHelper.Extract(job.MediaFilename, job.OutputDir, job.OutputBaseName, arg, cancellationToken);
 
-		private static async Task<KeyValuePair<string, string>> DoExtractMultithread(string mediaFilename, Argument arg) {
-			try {
-				var wavFilename = await AudioHelper.Extract(mediaFilename, arg);
-				return new KeyValuePair<string, string>(mediaFilename, wavFilename);
-			} catch (Exception ) {
-				throw;
-			}
-		}
+			if (arg.OnlyExtract)
+				return; // extracted audio is the final output, keep it
 
-		private static async Task DoTranscribe(string wavFilename, string mediaFilename, int index, Argument arg) {
 			try {
-				await WhisperHelper.Transcribe(arg.ModelType, wavFilename, mediaFilename, arg.OutputDir, arg.Language);
-				Output.Info($"Start transcribing media #{index}: {mediaFilename}");
+				await WhisperHelper.Transcribe(whisperFactory, wavFilename, job.MediaFilename, job.OutputDir, job.OutputBaseName, arg.Language, cancellationToken);
+			} finally {
 				FileHelper.DelFile(wavFilename);
-			} catch (Exception) {
-				throw;
 			}
 		}
 
-		private static async Task DoTranscribeMultithread(KeyValuePair<string, string>[] mediaWavMap, Argument arg) {
+		private static async Task<ExtractionResult> ExtractIsolated(MediaJob job, Argument arg, CancellationToken cancellationToken) {
 			try {
-				/// Stress test mode
-				//var tasks = Enumerable.Range(0, mediaWavMap.Length)
-				//	.Select(i => Task.Run(() => DoTranscribe(mediaWavMap[i].Value, mediaWavMap[i].Key, i + 1, arg)));
+				var wavFilename = await AudioHelper.Extract(job.MediaFilename, job.OutputDir, job.OutputBaseName, arg, cancellationToken);
 
-				//await Task.WhenAll(tasks);
-
-				int cnt = 1;
-				foreach (var pair in mediaWavMap) {
-					var wavFilename = pair.Value;
-					var mediaFilename = pair.Key;
-					await DoTranscribe(wavFilename, mediaFilename, cnt++, arg);
-				}
-			} catch (Exception) {
+				return new ExtractionResult(job, wavFilename, null);
+			} catch (OperationCanceledException) {
 				throw;
+			} catch (Exception ex) {
+				ReportSingleFailure(job.MediaFilename, ex);
+				return new ExtractionResult(job, null, ex.Message);
 			}
 		}
+
+		private static async Task TranscribeExtractedFile(ExtractionResult extraction, Argument arg, WhisperFactory whisperFactory, CancellationToken cancellationToken) {
+			if (arg.OnlyExtract)
+				return; // extracted audio is the final output, keep it
+
+			try {
+				await WhisperHelper.Transcribe(whisperFactory, extraction.WavFilename, extraction.Job.MediaFilename, extraction.Job.OutputDir, extraction.Job.OutputBaseName, arg.Language, cancellationToken);
+			} finally {
+				FileHelper.DelFile(extraction.WavFilename);
+			}
+		}
+
+		private static void ReportSingleFailure(string mediaFilename, Exception exception) {
+			Output.Error($"Failed: \"{mediaFilename}\" - {exception.Message}");
+		}
+
+		private static int ReportSummary(int succeeded, List<(string MediaFilename, string Message)> failures, int total) {
+			if (failures.Count == 0) {
+				Output.Success($"All done: {succeeded}/{total} file(s) processed.");
+				return ExitCode.Success;
+			}
+
+			Output.Error($"Finished with failures: {succeeded} succeeded, {failures.Count} failed, {total} total.");
+			foreach (var (mediaFilename, message) in failures)
+				Output.Error($"  - \"{mediaFilename}\": {message}");
+
+			return ExitCode.PartialFailure;
+		}
+
+		private static int GetDisplayWidth() {
+			// Console.WindowWidth throws when the output is redirected (no console), e.g. when the
+			// help text is piped into a file - fall back to a readable default width.
+			try {
+				var width = Console.WindowWidth;
+				return width > 0 ? width : FallbackDisplayWidth;
+			} catch (Exception) {
+				return FallbackDisplayWidth;
+			}
+		}
+
+		private sealed record MediaJob(string MediaFilename, string OutputDir, string OutputBaseName);
+
+		private sealed record ExtractionResult(MediaJob Job, string WavFilename, string ErrorMessage);
+
+		private const int FallbackDisplayWidth = 80;
+		private static readonly int MaxParallelExtractions = Math.Max(1, Environment.ProcessorCount / 2);
 	}
 }

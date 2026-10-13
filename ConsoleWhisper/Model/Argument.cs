@@ -12,7 +12,7 @@ namespace ConsoleWhisper.Model {
 		[Value(0, Min = 0, Max = 1, Required = false)]
 		public string ModelType { get; set; }
 
-		[Option('o', "output", Required = false, Hidden = false, HelpText = "(Default: current directory) Output directory.")]
+		[Option('o', "output", Required = false, Hidden = false, HelpText = "(Default: media file's directory) Output directory.")]
 		[Value(1, Min = 0, Max = 1, Required = false)]
 		public string OutputDir { get; set; }
 
@@ -28,22 +28,32 @@ namespace ConsoleWhisper.Model {
 		[Value(4, Required = false)]
 		public bool Multithread { get; set; }
 
+		[Option("audio-index", Required = false, Hidden = false, HelpText = "Audio stream index (0-based) to use, for media files with multiple audio streams.")]
+		public int? AudioIndex { get; set; }
+
+		[Option("audio-lang", Required = false, Hidden = false, HelpText = "Audio stream language to use (e.g. eng or en), for media files with multiple audio streams.")]
+		public string AudioLang { get; set; }
+
+		[Option('y', "yes", Required = false, Hidden = false, Default = false, HelpText = "Answer yes to confirmation prompts (non-interactive use).")]
+		public bool Yes { get; set; }
+
+		[Option("verbose", Required = false, Hidden = false, Default = false, HelpText = "Print full exception details (stack trace) on errors.")]
+		public bool Verbose { get; set; }
+
 		//[Option('g', "gpu", Required = false, Hidden = true, HelpText = "Currently not implemented.")]
 		//[Value(2, Required = false, Default = false)]
 		//public bool GPU { get; set; }
-
-		public Argument() {
-			OutputDir = Environment.CurrentDirectory;
-		}
 
 		public void Validate() {
 			if (!SupportedModels.Contains(ModelType))
 				throw new ArgumentException(message: $"Whisper model type \"{ModelType}\" is not supported.");
 			if (!SupportedLanguages.Contains(Language))
 				throw new ArgumentException(message: $"Language \"{Language}\" is not supported.\nCheck {LanguageLink} for available languages.");
+			if (AudioIndex < 0)
+				throw new ArgumentException(message: "Audio stream index must be 0 or greater.");
+			if (AudioIndex.HasValue && !string.IsNullOrWhiteSpace(AudioLang))
+				throw new ArgumentException(message: "Specify either --audio-index or --audio-lang, not both.");
 		}
-
-		internal const int SupportedArgumentsCount = 8;
 
 		private static readonly HashSet<string> SupportedModels = [ "base", "tiny", "small", "medium", "large-v1", "large-v2", "large-v3", "large-v3-turbo" ];
 		private static readonly HashSet<string> SupportedLanguages = [ "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr",

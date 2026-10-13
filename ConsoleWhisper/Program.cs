@@ -8,26 +8,40 @@ using System.Threading.Tasks;
 
 namespace ConsoleWhisper {
 	internal class Program {
-		static async Task Main(string[] args) {
+		static async Task<int> Main(string[] args) {
 			var parseResult = new Parser(options => options.HelpWriter = null)
 								.ParseArguments<Argument>(args);
 
+			if (parseResult is not Parsed<Argument> parsed)
+				return Runner.Error(parseResult, [.. parseResult.Errors]);
+
 			try {
-				await parseResult.WithParsedAsync(Runner.Run);
-				parseResult.WithNotParsed(errs => Runner.Error(parseResult, [.. errs]));
-			} catch (ArgumentException ex) {
-				if (!string.IsNullOrEmpty(ex.Message)) Output.Error($"Argument Error: {ex.Message}");
-				return;
-			} catch (IOException ex) {
-				if (!string.IsNullOrEmpty(ex.Message)) Output.Error($"IO Error: {ex.Message}");
-				return;
-			} catch (HttpRequestException ex) {
-				if (!string.IsNullOrEmpty(ex.Message)) Output.Error($"Http Request Error: {ex.Message}");
-				return;
+				return await Runner.Run(parsed.Value);
+			} catch (NoMatchException ex) {
+				ReportException(ex, parsed.Value.Verbose);
+				return ExitCode.NoMatch;
 			} catch (Exception ex) {
-				if (!string.IsNullOrEmpty(ex.Message)) Output.Error($"Unknown Error: {ex.Message}");
+				ReportException(ex, parsed.Value.Verbose);
+				return ExitCode.Fatal;
+			}
+		}
+
+		private static void ReportException(Exception exception, bool verbose) {
+			if (verbose) {
+				Output.Error(exception.ToString());
 				return;
 			}
+
+			var prefix = exception switch {
+				NoMatchException => "Error",
+				NotSupportedException => "Error",
+				ArgumentException => "Argument Error",
+				IOException => "IO Error",
+				HttpRequestException => "Http Request Error",
+				_ => "Unknown Error"
+			};
+
+			Output.Error(string.IsNullOrEmpty(exception.Message) ? $"{prefix}." : $"{prefix}: {exception.Message}");
 		}
 	}
 }
