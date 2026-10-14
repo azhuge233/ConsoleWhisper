@@ -6,19 +6,19 @@ namespace ConsoleWhisper.Model {
 	public class Argument {
 		[Option('i', "input", Required = true, Hidden = false, Separator = ',', HelpText = "Input media files.")]
 		[Value(5)]
-		public IEnumerable<string> Files { get; set; }
+		public IEnumerable<string> Files { get; set; } = [];
 
 		[Option('m', "model", Required = false, Hidden = false, Default = "small", HelpText = "Whisper model: base, tiny, small, medium, large-v1, large-v2, large-v3, large-v3-turbo.")]
 		[Value(0, Min = 0, Max = 1, Required = false)]
-		public string ModelType { get; set; }
+		public string ModelType { get; set; } = string.Empty;
 
 		[Option('o', "output", Required = false, Hidden = false, HelpText = "(Default: media file's directory) Output directory.")]
 		[Value(1, Min = 0, Max = 1, Required = false)]
-		public string OutputDir { get; set; }
+		public string? OutputDir { get; set; }
 
 		[Option('l', "language", Required = false, Hidden = false, Default = "auto", HelpText = "Specify transcribe language.")]
 		[Value(2, Required = false)]
-		public string Language { get; set; }
+		public string Language { get; set; } = string.Empty;
 
 		[Option("only-extract", Required = false, Hidden = false, Default = false, HelpText = "Extract audio stream only.")]
 		[Value(3, Required = false)]
@@ -32,7 +32,7 @@ namespace ConsoleWhisper.Model {
 		public int? AudioIndex { get; set; }
 
 		[Option("audio-lang", Required = false, Hidden = false, HelpText = "(Default: none) Audio stream language to use (e.g. eng or en), for media files with multiple audio streams.")]
-		public string AudioLang { get; set; }
+		public string? AudioLang { get; set; }
 
 		[Option('y', "yes", Required = false, Hidden = false, Default = false, HelpText = "Answer yes to confirmation prompts (non-interactive use).")]
 		public bool Yes { get; set; }

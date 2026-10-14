@@ -74,7 +74,7 @@ namespace ConsoleWhisper.Module {
 			return string.Join(Environment.NewLine, lines);
 		}
 
-		internal static string ResolveOutputDir(string outputDir, string mediaFilename) {
+		internal static string ResolveOutputDir(string? outputDir, string mediaFilename) {
 			var dir = string.IsNullOrWhiteSpace(outputDir)
 				? Path.GetDirectoryName(Path.GetFullPath(mediaFilename))
 				: Path.GetFullPath(outputDir);
@@ -86,7 +86,11 @@ namespace ConsoleWhisper.Module {
 			return dir;
 		}
 
-		internal static void DelFile(string filePath) {
+		internal static void DelFile(string? filePath) {
+			// Cleanup helper: a missing path (for example a failed extraction) is not an error.
+			if (filePath is null)
+				return;
+
 			File.Delete(filePath);
 		}
 

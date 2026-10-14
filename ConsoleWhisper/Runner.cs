@@ -25,20 +25,22 @@ namespace ConsoleWhisper {
 				.ToList();
 
 			using var cancellation = new CancellationTokenSource();
+			using var forceQuitHint = new CancellationTokenSource();
 			ConsoleCancelEventHandler cancelHandler = (_, eventArgs) => {
 				if (cancellation.IsCancellationRequested)
 					return;
 
 				eventArgs.Cancel = true;
-				Output.Warn("Cancelling, press Ctrl+C again to exit immediately.");
+				Output.Warn("Cancelling...");
 				cancellation.Cancel();
+				_ = ShowForceQuitHint(forceQuitHint.Token, ForceQuitHintDelay, () => Output.Warn("Still cancelling, press Ctrl+C again to force quit."));
 			};
 			Console.CancelKeyPress += cancelHandler;
 
 			try {
 				await FileHelper.PrepareFFmpeg();
 
-				WhisperFactory whisperFactory = null;
+				WhisperFactory? whisperFactory = null;
 				try {
 					if (!arg.OnlyExtract) {
 						await FileHelper.PrepareModel(arg.ModelType, cancellation.Token);
@@ -55,6 +57,9 @@ namespace ConsoleWhisper {
 				Output.Warn("Cancelled.");
 				return ExitCode.Cancelled;
 			} finally {
+				// The run is over, so the "still cancelling" hint is no longer useful.
+				forceQuitHint.Cancel();
+
 				// Clean up before unhooking the handler: if the user presses Ctrl+C during the
 				// cleanup we want it to be seen as an ordinary (already cancelled) signal.
 				TempFiles.Cleanup();
@@ -76,8 +81,8 @@ namespace ConsoleWhisper {
 			return errs.IsHelp() || errs.IsVersion() ? ExitCode.Success : ExitCode.Fatal;
 		}
 
-		private static async Task<int> DoSinglethread(List<MediaJob> jobs, Argument arg, WhisperFactory whisperFactory, CancellationToken cancellationToken) {
-			var failures = new List<(string MediaFilename, string Message)>();
+		private static async Task<int> DoSinglethread(List<MediaJob> jobs, Argument arg, WhisperFactory? whisperFactory, CancellationToken cancellationToken) {
+			var failures = new List<(string MediaFilename, string? Message)>();
 			var succeeded = 0;
 
 			foreach (var job in jobs) {
@@ -97,7 +102,7 @@ namespace ConsoleWhisper {
 			return ReportSummary(succeeded, failures, jobs.Count, arg.OnlyExtract);
 		}
 
-		private static async Task<int> DoMultithread(List<MediaJob> jobs, Argument arg, WhisperFactory whisperFactory, CancellationToken cancellationToken) {
+		private static async Task<int> DoMultithread(List<MediaJob> jobs, Argument arg, WhisperFactory? whisperFactory, CancellationToken cancellationToken) {
 			if (!arg.Yes) {
 				if (Console.IsInputRedirected)
 					throw new NotSupportedException(message:
@@ -157,14 +162,15 @@ namespace ConsoleWhisper {
 			return ReportSummary(succeeded, failures, jobs.Count, arg.OnlyExtract);
 		}
 
-		private static async Task ProcessJob(MediaJob job, Argument arg, WhisperFactory whisperFactory, CancellationToken cancellationToken) {
+		private static async Task ProcessJob(MediaJob job, Argument arg, WhisperFactory? whisperFactory, CancellationToken cancellationToken) {
 			var wavFilename = await AudioHelper.Extract(job.MediaFilename, job.OutputDir, job.OutputBaseName, arg, cancellationToken);
 
 			if (arg.OnlyExtract)
 				return; // extracted audio is the final output, keep it
 
 			try {
-				await WhisperHelper.Transcribe(whisperFactory, wavFilename, job.MediaFilename, job.OutputDir, job.OutputBaseName, arg.Language, cancellationToken);
+				// The factory is created whenever --only-extract is off (see Run).
+				await WhisperHelper.Transcribe(whisperFactory!, wavFilename, job.MediaFilename, job.OutputDir, job.OutputBaseName, arg.Language, cancellationToken);
 			} finally {
 				FileHelper.DelFile(wavFilename);
 			}
@@ -183,12 +189,14 @@ namespace ConsoleWhisper {
 			}
 		}
 
-		private static async Task TranscribeExtractedFile(ExtractionResult extraction, Argument arg, WhisperFactory whisperFactory, CancellationToken cancellationToken) {
+		private static async Task TranscribeExtractedFile(ExtractionResult extraction, Argument arg, WhisperFactory? whisperFactory, CancellationToken cancellationToken) {
 			if (arg.OnlyExtract)
 				return; // extracted audio is the final output, keep it
 
 			try {
-				await WhisperHelper.Transcribe(whisperFactory, extraction.WavFilename, extraction.Job.MediaFilename, extraction.Job.OutputDir, extraction.Job.OutputBaseName, arg.Language, cancellationToken);
+				// Only successful extractions reach this method, so the extracted file and the
+				// factory are both present.
+				await WhisperHelper.Transcribe(whisperFactory!, extraction.WavFilename!, extraction.Job.MediaFilename, extraction.Job.OutputDir, extraction.Job.OutputBaseName, arg.Language, cancellationToken);
 			} finally {
 				FileHelper.DelFile(extraction.WavFilename);
 			}
@@ -198,7 +206,22 @@ namespace ConsoleWhisper {
 			Output.Error($"Failed: \"{mediaFilename}\" - {exception.Message}");
 		}
 
-		private static int ReportSummary(int succeeded, List<(string MediaFilename, string Message)> failures, int total, bool onlyExtract) {
+		/// <summary>
+		/// Shows a hint about the force-quit keystroke, but only when the graceful cancellation
+		/// drags on. Downloads, ffmpeg and the transcriber all honour the token at once, while the
+		/// ffmpeg binary download cannot be cancelled at all - that is the case this hint is for.
+		/// </summary>
+		internal static async Task ShowForceQuitHint(CancellationToken hintCancellation, TimeSpan delay, Action hint) {
+			try {
+				await Task.Delay(delay, hintCancellation);
+			} catch (OperationCanceledException) {
+				return;
+			}
+
+			hint();
+		}
+
+		private static int ReportSummary(int succeeded, List<(string MediaFilename, string? Message)> failures, int total, bool onlyExtract) {
 			var action = onlyExtract ? "extracted" : "transcribed";
 
 			if (failures.Count == 0) {
@@ -226,8 +249,9 @@ namespace ConsoleWhisper {
 
 		private sealed record MediaJob(string MediaFilename, string OutputDir, string OutputBaseName);
 
-		private sealed record ExtractionResult(MediaJob Job, string WavFilename, string ErrorMessage);
+		private sealed record ExtractionResult(MediaJob Job, string? WavFilename, string? ErrorMessage);
 
+		private static readonly TimeSpan ForceQuitHintDelay = TimeSpan.FromSeconds(1.5);
 		private const int FallbackDisplayWidth = 80;
 		private static readonly int MaxParallelExtractions = Math.Max(1, Environment.ProcessorCount / 2);
 	}

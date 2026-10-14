@@ -63,8 +63,10 @@ namespace ConsoleWhisper.Module {
 			if (arg.AudioIndex is { } requestedIndex)
 				return ValidateAudioStreamIndex(requestedIndex, audioStreams);
 
-			if (!string.IsNullOrWhiteSpace(arg.AudioLang))
-				return FindAudioStreamByLanguage(mediaFilename, arg.AudioLang, audioStreams);
+			var audioLang = arg.AudioLang;
+
+			if (!string.IsNullOrWhiteSpace(audioLang))
+				return FindAudioStreamByLanguage(mediaFilename, audioLang, audioStreams);
 
 			// Multithread mode never prompts: it always uses the first audio stream.
 			if (arg.Multithread || audioStreams.Count == 1)
