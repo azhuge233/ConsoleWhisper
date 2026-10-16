@@ -142,7 +142,7 @@ jobs:
         '@
 
         Set-Content -Path release-notes.md -Value ($match.Groups[1].Value.Trim() + "`n" + $footer) -Encoding utf8
-        Write-Host "Release notes for $version:"
+        Write-Host "Release notes for version $version"
         Get-Content release-notes.md
 
     - name: Create Release
