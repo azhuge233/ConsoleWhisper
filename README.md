@@ -14,8 +14,9 @@ Generate `.srt` subtitles for your video / audio files with [Whisper](https://gi
   -o, --output      (Default: media file's directory) Output directory.
   -l, --language    (Default: auto) Specify transcribe language.
   --only-extract    (Default: false) Extract audio stream only.
-  --multithread     (Default: false) Use multithread, only works for audio
-                    extraction.
+  --multithread     (Default: false) Use multithread: parallel audio extraction
+                    and transcription (parallel transcription needs a GPU
+                    runtime).
   --audio-index     (Default: none) Audio stream index (0-based) to use, for
                     media files with multiple audio streams.
   --audio-lang      (Default: none) Audio stream language to use (e.g. eng or
@@ -62,6 +63,38 @@ Notes:
 - the GPU package is a superset: on a machine without a usable GPU it behaves exactly like the CPU package
 - `Runtime: Vulkan` on an integrated GPU is expected - the Vulkan runtime only checks that the library is present, not that the GPU is a fast one; compare the timings if in doubt
 - the Linux GPU package is built by CI but has **not** been verified on hardware
+
+## Parallel processing
+
+`--multithread` runs a batch with several files at once:
+
+- **audio extraction** runs in parallel for the whole batch
+- **transcription** runs in parallel on a GPU backend: `clamp(cores / 4, 2, 4)` files at once (three of them on a 12 core machine), each transcription using `cores / N` threads with `N` being that clamped count, not the number of files that happen to be left. It stays one file at a time on a CPU backend (a second instance adds little there while the memory use doubles) and in a run with a single file, which behaves exactly like the serial mode
+
+Which backend is in use is on the `Runtime:` line the program prints at startup (`Cuda`, `Vulkan`, `Cpu`, ...) - that line decides. Three things are worth knowing before a long batch:
+
+- **memory**: every parallel transcription holds its own copy of the model - with `small` that is about 530 MB per file, so four files need roughly 2.1 GB on top of the rest. That grows with the model (with `medium` and above it is several GB per file), so a big model may not fit as many parallel files as the count allows - use a smaller model, or plain serial runs, when memory is tight
+- **on a 1-2 core machine** the count stays at 2 (the clamp floor) with one thread each - intended, not a bug: the CPU-backend fallback and the cap against the file count still apply
+- **integrated GPUs take the parallel path too**: the check behind it does not care about the GPU (see [GPU acceleration](#gpu-acceleration)), while the gains above the serial mode were measured on a dedicated NVIDIA GPU - on an integrated one the parallel mode may buy little, so compare a small batch if in doubt
+
+Parallel transcription prints one line per file with the file name in front and no per-segment progress (several files would write over each other), while the audio extraction keeps its `[file]` prefix:
+
+```pwsh
+> ConsoleWhisper -i ".\*.mp4" --multithread -y -m small
+Runtime: Cuda
+[1.mp4] Extracting audio...
+[2.mp4] Extracting audio...
+[3.mp4] Extracting audio...
+[1.mp4] Start transcribing ".\1.mp4"...
+[2.mp4] Start transcribing ".\2.mp4"...
+[3.mp4] Start transcribing ".\3.mp4"...
+[1.mp4] Done: 1-mp4.srt
+[3.mp4] Done: 3-mp4.srt
+[2.mp4] Done: 2-mp4.srt
+All done: 3/3 file(s) transcribed.
+```
+
+`--multithread` disables user input, so it asks for a confirmation - `-y` / `--yes` answers it upfront (required when there is no interactive terminal) - and media files with several soundtracks always use the first one.
 
 ## Input patterns
 
@@ -128,8 +161,7 @@ All done: 4/4 file(s) extracted.
 ```
 
 - `--only-extract` writes `<name>-<ext>.wav` (the extracted waveform, no Whisper model is downloaded)
-- `--multithread` only speeds up the audio extraction; transcription still runs one file at a time
-- `--multithread` disables user input, so it asks for a confirmation - `-y` / `--yes` answers it upfront (required when there is no interactive terminal)
+- `--multithread` extracts the soundtracks of the whole batch in parallel - and transcribes in parallel too whenever it pays off, see [Parallel processing](#parallel-processing)
 
 ### One failing file does not stop the batch
 

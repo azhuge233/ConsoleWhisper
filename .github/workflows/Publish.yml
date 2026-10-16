@@ -122,5 +122,5 @@ jobs:
           *.zip `
           --target $env:GITHUB_SHA `
           --title "Latest" `
-          --notes "Windows: CW-win-x64.zip (CPU) and CW-win-x64-gpu.zip (GPU: the CUDA backend needs an NVIDIA GPU plus a CUDA Toolkit >= 13.0.1, Vulkan works with any Vulkan capable driver, otherwise it falls back to the CPU runtime). Linux: CW-linux-x64.zip (CPU) and CW-linux-x64-gpu.zip (GPU, built but not verified on hardware). macOS: CW-osx-x64.zip (CPU; Apple Silicon runs on Metal through the default runtime). The backend that actually ran is printed as a 'Runtime:' line at startup." `
+          --notes "Windows: CW-win-x64.zip (CPU) and CW-win-x64-gpu.zip (GPU: the CUDA backend needs an NVIDIA GPU plus a CUDA Toolkit >= 13.0.1, Vulkan works with any Vulkan capable driver, otherwise it falls back to the CPU runtime). Linux: CW-linux-x64.zip (CPU) and CW-linux-x64-gpu.zip (GPU, built but not verified on hardware). macOS: CW-osx-x64.zip (CPU; Apple Silicon runs on Metal through the default runtime). The backend that actually ran is printed as a 'Runtime:' line at startup. With --multithread, several files are transcribed in parallel on a GPU backend (see the README)." `
           --latest

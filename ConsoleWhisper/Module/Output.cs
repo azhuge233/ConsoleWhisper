@@ -6,32 +6,44 @@ namespace ConsoleWhisper.Module {
 			Console.ResetColor();
 		}
 		internal static void Error(string msg) {
-			Console.ForegroundColor = ConsoleColor.Red;
-			Console.WriteLine(msg);
-			ResetColor();
+			lock (LineLock) {
+				Console.ForegroundColor = ConsoleColor.Red;
+				Console.WriteLine(msg);
+				ResetColor();
+			}
 		}
 		internal static void Warn(string msg) {
-			Console.ForegroundColor = ConsoleColor.Yellow;
-			Console.WriteLine(msg);
-			ResetColor();
+			lock (LineLock) {
+				Console.ForegroundColor = ConsoleColor.Yellow;
+				Console.WriteLine(msg);
+				ResetColor();
+			}
 		}
 		internal static void WarnR(string msg) {
-			Console.ForegroundColor = ConsoleColor.Yellow;
-			Console.Write(msg);
-			ResetColor();
+			lock (LineLock) {
+				Console.ForegroundColor = ConsoleColor.Yellow;
+				Console.Write(msg);
+				ResetColor();
+			}
 		}
 		internal static void Success(string msg) {
-			Console.ForegroundColor = ConsoleColor.Green;
-			Console.WriteLine(msg);
-			ResetColor();
+			lock (LineLock) {
+				Console.ForegroundColor = ConsoleColor.Green;
+				Console.WriteLine(msg);
+				ResetColor();
+			}
 		}
 		internal static void Info(string msg) {
-			Console.WriteLine(msg);
-			ResetColor();
+			lock (LineLock) {
+				Console.WriteLine(msg);
+				ResetColor();
+			}
 		}
 		internal static void InfoR(string msg) {
-			Console.Write(msg);
-			ResetColor();
+			lock (LineLock) {
+				Console.Write(msg);
+				ResetColor();
+			}
 		}
 
 		internal static void Help(string msg, bool versionOnly = false) {
@@ -75,30 +87,34 @@ namespace ConsoleWhisper.Module {
 		/// per step when the output is redirected. Pass a total of 0 when the size is unknown.
 		/// </summary>
 		internal static void ReportDownload(string label, long downloadedBytes, long totalBytes) {
-			if (totalBytes > 0) {
-				var percent = (int)(downloadedBytes * 100 / totalBytes);
+			lock (LineLock) {
+				if (totalBytes > 0) {
+					var percent = (int)(downloadedBytes * 100 / totalBytes);
 
-				if (percent < 100 && percent < lastReportedPercent + ProgressStepPercent)
+					if (percent < 100 && percent < lastReportedPercent + ProgressStepPercent)
+						return;
+
+					lastReportedPercent = percent;
+					Progress($"Downloading {label}: {percent}% ({FormatSize(downloadedBytes)} of {FormatSize(totalBytes)})");
+					return;
+				}
+
+				if (downloadedBytes - lastReportedBytes < ProgressStepBytes)
 					return;
 
-				lastReportedPercent = percent;
-				Progress($"Downloading {label}: {percent}% ({FormatSize(downloadedBytes)} of {FormatSize(totalBytes)})");
-				return;
+				lastReportedBytes = downloadedBytes;
+				Progress($"Downloading {label}: {FormatSize(downloadedBytes)}");
 			}
-
-			if (downloadedBytes - lastReportedBytes < ProgressStepBytes)
-				return;
-
-			lastReportedBytes = downloadedBytes;
-			Progress($"Downloading {label}: {FormatSize(downloadedBytes)}");
 		}
 
 		internal static void CompleteDownload(string label) {
-			lastReportedPercent = -1;
-			lastReportedBytes = 0;
+			lock (LineLock) {
+				lastReportedPercent = -1;
+				lastReportedBytes = 0;
 
-			Progress($"Downloaded {label}.");
-			EndProgress();
+				Progress($"Downloaded {label}.");
+				EndProgress();
+			}
 		}
 
 		internal static string FormatSize(long bytes) {
@@ -139,6 +155,13 @@ namespace ConsoleWhisper.Module {
 
 		private const int ProgressStepPercent = 5;
 		private const long ProgressStepBytes = 10L * 1024 * 1024;
+
+		// Several files can be transcribed at the same time (--multithread), so every line is written
+		// under one lock: the colour change, the line itself and the colour reset must not be torn apart
+		// by another file's output. The download progress joins the lock as well (its writers are only
+		// reached through the two locked entry points above); the help text stays outside it - it is
+		// printed before any parallel work starts.
+		private static readonly object LineLock = new();
 
 		private static int lastReportedPercent = -1;
 		private static long lastReportedBytes;

@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using System;
 using System.Linq;
 using Whisper.net;
+using Whisper.net.LibraryLoader;
 
 namespace ConsoleWhisper {
 	internal static class Runner {
@@ -168,20 +169,32 @@ namespace ConsoleWhisper {
 				.Where(extraction => extraction.WavFilename is null)
 				.Select(extraction => (extraction.Job.MediaFilename, extraction.ErrorMessage))
 				.ToList();
-			var succeeded = 0;
+			var pendingFiles = extractions.Where(extraction => extraction.WavFilename is not null).ToList();
 
-			foreach (var extraction in extractions.Where(extraction => extraction.WavFilename is not null)) {
-				cancellationToken.ThrowIfCancellationRequested();
+			// Only the transcription phase runs several files at once, and only when a plan says so (see
+			// ResolveTranscriptionPlan): a single file or a CPU backend keeps the one-at-a-time path this
+			// program always had.
+			var plan = ResolveTranscriptionPlan(pendingFiles.Count, arg);
+			int succeeded;
 
-				try {
-					await TranscribeExtractedFile(extraction, arg, whisperFactory, cancellationToken);
-					succeeded++;
-				} catch (OperationCanceledException) {
-					throw;
-				} catch (Exception ex) {
-					ReportSingleFailure(extraction.Job.MediaFilename, ex);
-					failures.Add((extraction.Job.MediaFilename, ex.Message));
+			if (plan is null) {
+				succeeded = 0;
+
+				foreach (var extraction in pendingFiles) {
+					cancellationToken.ThrowIfCancellationRequested();
+
+					try {
+						await TranscribeExtractedFile(extraction, arg, whisperFactory, cancellationToken);
+						succeeded++;
+					} catch (OperationCanceledException) {
+						throw;
+					} catch (Exception ex) {
+						ReportSingleFailure(extraction.Job.MediaFilename, ex);
+						failures.Add((extraction.Job.MediaFilename, ex.Message));
+					}
 				}
+			} else {
+				succeeded = await TranscribeInParallel(pendingFiles, arg, whisperFactory, plan, failures, cancellationToken);
 			}
 
 			return ReportSummary(succeeded, failures, jobs.Count, arg.OnlyExtract);
@@ -214,17 +227,136 @@ namespace ConsoleWhisper {
 			}
 		}
 
-		private static async Task TranscribeExtractedFile(ExtractionResult extraction, Argument arg, WhisperFactory? whisperFactory, CancellationToken cancellationToken) {
+		/// <summary>
+		/// Transcribes one extracted file. A plan makes it part of a parallel run (its own share of the
+		/// cores, per-file output lines); without one it behaves exactly like the serial path.
+		/// </summary>
+		private static async Task TranscribeExtractedFile(ExtractionResult extraction, Argument arg, WhisperFactory? whisperFactory, CancellationToken cancellationToken, TranscriptionPlan? plan = null) {
 			if (arg.OnlyExtract)
 				return; // extracted audio is the final output, keep it
 
 			try {
 				// Only successful extractions reach this method, so the extracted file and the
 				// factory are both present.
-				await WhisperHelper.Transcribe(whisperFactory!, extraction.WavFilename!, extraction.Job.MediaFilename, extraction.Job.OutputDir, extraction.Job.OutputBaseName, arg.Language, cancellationToken);
+				await WhisperHelper.Transcribe(whisperFactory!, extraction.WavFilename!, extraction.Job.MediaFilename, extraction.Job.OutputDir, extraction.Job.OutputBaseName, arg.Language, cancellationToken,
+					threads: plan?.Threads, parallel: plan is not null);
 			} finally {
 				FileHelper.DelFile(extraction.WavFilename);
 			}
+		}
+
+		/// <summary>
+		/// Transcribes the files that came out of the extraction phase with several files in flight at
+		/// once. Every file keeps the failure isolation of the one-at-a-time path: a failure is reported
+		/// and collected on its own, so one bad file never takes the rest of the batch down.
+		/// </summary>
+		private static async Task<int> TranscribeInParallel(List<ExtractionResult> pendingFiles, Argument arg, WhisperFactory? whisperFactory, TranscriptionPlan plan, List<(string MediaFilename, string? Message)> failures, CancellationToken cancellationToken) {
+			var succeeded = 0;
+			var failuresLock = new object();
+
+			// One slot per file that really runs at once: the files beyond it wait their turn, so even a
+			// large batch never holds more transcriptions (and more memory) than the plan allows.
+			using var transcriptionSlots = new SemaphoreSlim(plan.Concurrency);
+
+			await Task.WhenAll(pendingFiles.Select(async extraction => {
+				await transcriptionSlots.WaitAsync(cancellationToken);
+
+				try {
+					await TranscribeExtractedFile(extraction, arg, whisperFactory, cancellationToken, plan);
+					Interlocked.Increment(ref succeeded);
+				} catch (OperationCanceledException) {
+					throw;
+				} catch (Exception ex) {
+					ReportSingleFailure(extraction.Job.MediaFilename, ex);
+
+					// Several files can fail at the same time, and the list is shared with the rest of the run.
+					lock (failuresLock)
+						failures.Add((extraction.Job.MediaFilename, ex.Message));
+				} finally {
+					transcriptionSlots.Release();
+				}
+			}));
+
+			return succeeded;
+		}
+
+		/// <summary>
+		/// Resolves how the transcription phase runs: a plan means several files are transcribed at the
+		/// same time, no plan means the classic one-file-at-a-time path.
+		/// </summary>
+		private static TranscriptionPlan? ResolveTranscriptionPlan(int pendingFiles, Argument arg) {
+			if (arg.OnlyExtract)
+				return null; // nothing is transcribed at all
+
+			var processorCount = Environment.ProcessorCount;
+			var concurrency = GetTranscriptionConcurrency(processorCount);
+
+			if (!ShouldTranscribeInParallel(pendingFiles, concurrency, RuntimeOptions.LoadedLibrary)) {
+				ExplainSerialTranscription(arg, pendingFiles, concurrency);
+				return null;
+			}
+
+			// The threads are handed out by the planned concurrency, not by the files that happen to be
+			// left: a batch that lost most of its extractions still gets the same threads per file.
+			return new TranscriptionPlan(GetActiveTranscriptionSlots(concurrency, pendingFiles), GetThreadsPerTranscriber(processorCount, concurrency));
+		}
+
+		/// <summary>
+		/// Explains, on demand (--verbose), why a multi-file run transcribes one file at a time after
+		/// all: on a CPU backend that is intended behaviour rather than a failed parallel run.
+		/// </summary>
+		private static void ExplainSerialTranscription(Argument arg, int pendingFiles, int concurrency) {
+			if (!arg.Verbose || pendingFiles <= 1 || concurrency <= 1)
+				return;
+
+			// With several files and room for several transcriptions, the backend is the only reason left. The
+			// concurrency check is defensive only: the clamp floor keeps the concurrency at 2 or more.
+			Output.Info($"Transcribing one file at a time: the {WhisperHelper.DescribeRuntime()} backend does not benefit from parallel transcription.");
+		}
+
+		/// <summary>
+		/// Files a parallel run transcribes at once: a quarter of the cores, kept between two and four.
+		/// The lower bound of two is deliberate and not a correction of the core count - on a machine with
+		/// one or two cores the concurrency is larger than the core count, and the CPU backend check plus
+		/// the pending file count keep that ("two files, one thread each") harmless.
+		/// </summary>
+		internal static int GetTranscriptionConcurrency(int processorCount) {
+			return Math.Clamp(processorCount / CoresPerTranscription, MinParallelTranscriptions, MaxParallelTranscriptions);
+		}
+
+		/// <summary>
+		/// Threads one transcription of a parallel run may use: the cores are shared out between the files
+		/// running at once, so the instances do not all ask for every core.
+		/// </summary>
+		internal static int GetThreadsPerTranscriber(int processorCount, int concurrency) {
+			return Math.Max(1, processorCount / concurrency);
+		}
+
+		/// <summary>
+		/// Files that really run at once: a parallel run never starts more transcriptions than there are
+		/// files waiting for one.
+		/// </summary>
+		internal static int GetActiveTranscriptionSlots(int concurrency, int pendingFiles) {
+			return Math.Min(concurrency, pendingFiles);
+		}
+
+		/// <summary>
+		/// Whether the transcription phase goes parallel: it takes more than one file, room for more than
+		/// one transcription and a backend that can take several of them at once.
+		/// </summary>
+		internal static bool ShouldTranscribeInParallel(int pendingFiles, int concurrency, RuntimeLibrary? loadedLibrary) {
+			return pendingFiles > 1 && concurrency > 1 && IsGpuBackend(loadedLibrary);
+		}
+
+		/// <summary>
+		/// Every backend except the CPU runtimes counts as one that gains from parallel transcriptions:
+		/// the CPU runtimes are already saturated by a single instance, so extra ones only add context
+		/// switching (measured 1.16x there, while the memory use doubles), while CUDA and Vulkan both leave
+		/// the GPU with room for several. A missing library (nothing loaded at all, e.g. --only-extract) is
+		/// no GPU either.
+		/// </summary>
+		internal static bool IsGpuBackend(RuntimeLibrary? loadedLibrary) {
+			return loadedLibrary is not null and not RuntimeLibrary.Cpu and not RuntimeLibrary.CpuNoAvx;
 		}
 
 		private static void ReportSingleFailure(string mediaFilename, Exception exception) {
@@ -276,9 +408,24 @@ namespace ConsoleWhisper {
 
 		private sealed record ExtractionResult(MediaJob Job, string? WavFilename, string? ErrorMessage);
 
+		/// <summary>
+		/// Settings of a parallel transcription phase: how many files run at once and how many threads
+		/// each of them may use. No plan means the one-file-at-a-time path.
+		/// </summary>
+		private sealed record TranscriptionPlan(int Concurrency, int Threads);
+
 		private static readonly TimeSpan ForceQuitHintDelay = TimeSpan.FromSeconds(1.5);
 		private const int FallbackDisplayWidth = 80;
 		private const string NoRuntimeInfoName = "unavailable";
 		private static readonly int MaxParallelExtractions = Math.Max(1, Environment.ProcessorCount / 2);
+
+		/// <summary>
+		/// Cores per parallel transcription (a quarter of them) and the bounds that number is kept in: the
+		/// measurements behind the parallel mode put the sweet spot at three to four files at once (two
+		/// files gain little), and the floor keeps a machine with few cores at two files.
+		/// </summary>
+		private const int CoresPerTranscription = 4;
+		private const int MinParallelTranscriptions = 2;
+		private const int MaxParallelTranscriptions = 4;
 	}
 }

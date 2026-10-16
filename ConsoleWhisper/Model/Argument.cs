@@ -24,7 +24,7 @@ namespace ConsoleWhisper.Model {
 		[Value(3, Required = false)]
 		public bool OnlyExtract { get; set; }
 
-		[Option("multithread", Required = false, Hidden = false, Default = false, HelpText = "Use multithread, only works for audio extraction.")]
+		[Option("multithread", Required = false, Hidden = false, Default = false, HelpText = "Use multithread: parallel audio extraction and transcription (parallel transcription needs a GPU runtime).")]
 		[Value(4, Required = false)]
 		public bool Multithread { get; set; }
 

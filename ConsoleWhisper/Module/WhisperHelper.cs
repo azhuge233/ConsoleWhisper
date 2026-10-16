@@ -9,19 +9,38 @@ using Whisper.net.LibraryLoader;
 
 namespace ConsoleWhisper.Module {
 	internal class WhisperHelper {
-		internal static async Task Transcribe(WhisperFactory whisperFactory, string wavFilename, string mediaFilename, string outputDir, string outputBaseName, string language, CancellationToken cancellationToken) {
-			await using var processor = whisperFactory.CreateBuilder()
-				.WithLanguage(language)
-				.WithPrintProgress()
-				.Build();
+		/// <summary>
+		/// Transcribes one extracted file. The optional arguments describe a parallel run (see Runner):
+		/// with several transcriptions at once each one gets a share of the cores and prints per-file lines
+		/// instead of progress; a one-at-a-time run passes neither and keeps the output it always had.
+		/// </summary>
+		internal static async Task Transcribe(WhisperFactory whisperFactory, string wavFilename, string mediaFilename, string outputDir, string outputBaseName, string language, CancellationToken cancellationToken, int? threads = null, bool parallel = false) {
+			var builder = whisperFactory.CreateBuilder()
+				.WithLanguage(language);
+
+			// Several transcriptions at once would print their progress onto the same line, so progress
+			// printing belongs to a one-file-at-a-time run.
+			if (!parallel)
+				builder = builder.WithPrintProgress();
+
+			// Without this every concurrent transcription would ask for every core and the instances would
+			// fight over them.
+			if (threads.HasValue)
+				builder = builder.WithThreads(threads.Value);
+
+			await using var processor = builder.Build();
 
 			using var waveFileStream = File.OpenRead(wavFilename);
 
 			var transcriptPath = FileHelper.GetTranscriptPath(outputDir, outputBaseName);
 			var tempTranscriptPath = FileHelper.GetTempTranscriptPath(outputDir, outputBaseName);
 
+			// A parallel run names the file on every line: the lines of several transcriptions are
+			// interleaved on the console.
+			var prefix = FormatPrefix(parallel, mediaFilename);
+
 			using (var transcriptFileStream = File.Create(tempTranscriptPath)) {
-				Output.Info($"Start transcribing \"{mediaFilename}\"...");
+				Output.Info(FormatLine(prefix, $"Start transcribing \"{mediaFilename}\"..."));
 
 				int cnt = 1;
 				await foreach(var result in processor.ProcessAsync(waveFileStream, cancellationToken)) {
@@ -40,7 +59,24 @@ namespace ConsoleWhisper.Module {
 			cancellationToken.ThrowIfCancellationRequested();
 			File.Move(tempTranscriptPath, transcriptPath, true);
 
-			Output.Info($"Done: {Path.GetFileName(transcriptPath)}");
+			Output.Info(FormatLine(prefix, $"Done: {Path.GetFileName(transcriptPath)}"));
+		}
+
+		/// <summary>
+		/// Prefixes a per-file line with the media file name while several files are transcribed at the
+		/// same time, so the interleaved lines of a parallel run stay attributable; a one-file-at-a-time
+		/// run keeps its lines exactly as they were.
+		/// </summary>
+		internal static string FormatPrefix(bool parallelRun, string mediaFilename) {
+			return parallelRun ? $"[{Path.GetFileName(mediaFilename)}] " : string.Empty;
+		}
+
+		/// <summary>
+		/// Builds a whole line in one string: a prefix and a message written in two calls could be torn
+		/// apart by another file's output.
+		/// </summary>
+		internal static string FormatLine(string prefix, string message) {
+			return $"{prefix}{message}";
 		}
 
 		internal static async Task DownloadModel(string modelType, CancellationToken cancellationToken) {
