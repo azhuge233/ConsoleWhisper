@@ -53,16 +53,50 @@ jobs:
       shell: pwsh
       run: |
         Set-Location "$env:GITHUB_WORKSPACE"
+
+        # A missing or half-published package must fail this step: a green job that silently ships a
+        # release without its GPU packages would be worse than a red one.
+        $ErrorActionPreference = "Stop"
+        $PSNativeCommandUseErrorActionPreference = $true
         
         dotnet restore
         
         dotnet publish ConsoleWhisper/ConsoleWhisper.csproj -c Release -r linux-x64 -p:PublishDir="$env:GITHUB_WORKSPACE\Release\linux-x64"
         dotnet publish ConsoleWhisper/ConsoleWhisper.csproj -c Release -r win-x64 -p:PublishDir="$env:GITHUB_WORKSPACE\Release\win-x64"
         dotnet publish ConsoleWhisper/ConsoleWhisper.csproj -c Release -r osx-x64 -p:PublishDir="$env:GITHUB_WORKSPACE\Release\osx-x64"
+
+        dotnet publish ConsoleWhisper/ConsoleWhisper.csproj -c Release -r win-x64 -p:GpuSupport=true -p:PublishDir="$env:GITHUB_WORKSPACE\Release\win-x64-gpu"
+        dotnet publish ConsoleWhisper/ConsoleWhisper.csproj -c Release -r linux-x64 -p:GpuSupport=true -p:PublishDir="$env:GITHUB_WORKSPACE\Release\linux-x64-gpu"
         
         Compress-Archive -Path "$env:GITHUB_WORKSPACE\Release\win-x64\" -DestinationPath "CW-win-x64.zip"
         Compress-Archive -Path "$env:GITHUB_WORKSPACE\Release\linux-x64\" -DestinationPath "CW-linux-x64.zip"
         Compress-Archive -Path "$env:GITHUB_WORKSPACE\Release\osx-x64\" -DestinationPath "CW-osx-x64.zip"
+        # The GPU packages (pruned to their own RID) are the only per-platform pair with more than
+        # one artifact, so drive both of them from a single list instead of repeating the names.
+        $gpuRids = @("win-x64-gpu", "linux-x64-gpu")
+
+        foreach ($rid in $gpuRids) {
+          Compress-Archive -Path "$env:GITHUB_WORKSPACE\Release\$rid\" -DestinationPath "CW-$rid.zip"
+        }
+
+        # Print size, root files and natives of every GPU package, so a broken pruning step, a stray
+        # foreign file or a suddenly huge package is visible right in the CI log.
+        foreach ($rid in $gpuRids) {
+          Write-Host "--- $rid ---"
+          Write-Host ("  package: {0} MB" -f [math]::Round((Get-Item "CW-$rid.zip").Length / 1MB, 1))
+          Get-ChildItem -File "$env:GITHUB_WORKSPACE\Release\$rid" | ForEach-Object {
+            Write-Host ("  root: {0}  {1:N1} MB" -f $_.Name, ($_.Length / 1MB))
+          }
+          Get-ChildItem -Recurse -File "$env:GITHUB_WORKSPACE\Release\$rid\runtimes" | ForEach-Object {
+            Write-Host ("  native: {0}  {1:N1} MB" -f $_.FullName.Substring("$env:GITHUB_WORKSPACE\Release\$rid\".Length), ($_.Length / 1MB))
+          }
+        }
+
+        # Five packages are expected; anything else means a publish or compression step above was lost.
+        $packages = @(Get-ChildItem "*.zip")
+        if ($packages.Count -ne 5) {
+          throw "Expected 5 packages, found $($packages.Count): $($packages.Name -join ', ')"
+        }
         
     - name: Recreate Latest Release
       shell: pwsh
@@ -88,5 +122,5 @@ jobs:
           *.zip `
           --target $env:GITHUB_SHA `
           --title "Latest" `
-          --notes "" `
+          --notes "Windows: CW-win-x64.zip (CPU) and CW-win-x64-gpu.zip (GPU: the CUDA backend needs an NVIDIA GPU plus a CUDA Toolkit >= 13.0.1, Vulkan works with any Vulkan capable driver, otherwise it falls back to the CPU runtime). Linux: CW-linux-x64.zip (CPU) and CW-linux-x64-gpu.zip (GPU, built but not verified on hardware). macOS: CW-osx-x64.zip (CPU; Apple Silicon runs on Metal through the default runtime). The backend that actually ran is printed as a 'Runtime:' line at startup." `
           --latest

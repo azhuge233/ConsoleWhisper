@@ -47,6 +47,8 @@ namespace ConsoleWhisper {
 						whisperFactory = WhisperFactory.FromPath(FileHelper.GetModelPath(arg.ModelType));
 					}
 
+					ReportRuntime(arg, whisperFactory);
+
 					return arg.Multithread
 						? await DoMultithread(jobs, arg, whisperFactory, cancellation.Token)
 						: await DoSinglethread(jobs, arg, whisperFactory, cancellation.Token);
@@ -65,6 +67,29 @@ namespace ConsoleWhisper {
 				TempFiles.Cleanup();
 				Console.CancelKeyPress -= cancelHandler;
 			}
+		}
+
+		/// <summary>
+		/// Reports the native backend that serves this run. The GPU packages fall back to the CPU
+		/// runtime without saying so, and only this line tells the user what really runs.
+		/// </summary>
+		private static void ReportRuntime(Argument arg, WhisperFactory? whisperFactory) {
+			Output.Info($"Runtime: {WhisperHelper.DescribeRuntime()}");
+
+			// The capability text needs a loaded native library, so --only-extract has none to show.
+			if (!arg.Verbose || whisperFactory is null)
+				return;
+
+			// The capability text is informational only - up there it comes from a native call that may
+			// throw, and a diagnostic line must never be able to abort a whole batch.
+			string runtimeInfo;
+			try {
+				runtimeInfo = WhisperFactory.GetRuntimeInfo() ?? NoRuntimeInfoName;
+			} catch (Exception) {
+				runtimeInfo = NoRuntimeInfoName;
+			}
+
+			Output.Info($"Runtime info: {runtimeInfo}");
 		}
 
 		internal static int Error<T>(ParserResult<T> result, List<Error> errs) {
@@ -253,6 +278,7 @@ namespace ConsoleWhisper {
 
 		private static readonly TimeSpan ForceQuitHintDelay = TimeSpan.FromSeconds(1.5);
 		private const int FallbackDisplayWidth = 80;
+		private const string NoRuntimeInfoName = "unavailable";
 		private static readonly int MaxParallelExtractions = Math.Max(1, Environment.ProcessorCount / 2);
 	}
 }

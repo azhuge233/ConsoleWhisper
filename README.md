@@ -30,6 +30,39 @@ Generate `.srt` subtitles for your video / audio files with [Whisper](https://gi
 
 FFmpeg and the Whisper model are downloaded automatically on first use (into the program directory), no manual setup needed.
 
+## GPU acceleration
+
+Besides the plain CPU packages, each supported platform ships a GPU package (`CW-win-x64-gpu.zip`,
+`CW-linux-x64-gpu.zip`). It contains the CPU runtime **plus** the GPU runtimes and needs no different
+usage - the backend is selected automatically at startup:
+
+| Backend | Needs |
+|---------|-------|
+| CUDA | an NVIDIA GPU **and** the [CUDA Toolkit](https://developer.nvidia.com/cuda-downloads) >= 13.0.1 (the graphics driver alone is not enough - games talk to the driver, CUDA computation needs the CUDA libraries; installing **only the Runtime component** of the Toolkit is sufficient, verified on an RTX 3060) |
+| Vulkan | any GPU with a Vulkan capable driver (NVIDIA, AMD or Intel, integrated ones included) |
+| CPU | nothing - the same runtime the plain packages use |
+
+When the GPU runtime cannot be loaded the program falls back to the CPU runtime **silently**, so every
+run prints the backend that actually ran - check this line first when you compare speed:
+
+```pwsh
+> ConsoleWhisper.exe -i ".\episode.mkv" -m small
+Runtime: Cuda
+Extracting audio...
+Start transcribing ".\episode.mkv"...
+Done: episode-mkv.srt
+```
+
+Add `--verbose` for the capability text of the loaded runtime. The plain packages print the same line
+(it also shows a CPU variant fallback such as `CpuNoAvx`); `--only-extract` runs need no runtime at all
+and print `Runtime: not loaded`.
+
+Notes:
+
+- the GPU package is a superset: on a machine without a usable GPU it behaves exactly like the CPU package
+- `Runtime: Vulkan` on an integrated GPU is expected - the Vulkan runtime only checks that the library is present, not that the GPU is a fast one; compare the timings if in doubt
+- the Linux GPU package is built by CI but has **not** been verified on hardware
+
 ## Input patterns
 
 `-i` accepts one or more files or wildcard patterns, separated by `,`:
@@ -49,6 +82,7 @@ A duplicate file matched by several patterns is only processed once, and files a
 
 ```pwsh
 > ConsoleWhisper.exe -i ".\Season 01\**\*.mkv" -m medium --audio-lang eng
+Runtime: Cpu
 Using audio stream #1 (language: eng | AC3 5.1 @ 640 kbps)
 Extracting audio...
 Start transcribing ".\Season 01\S01E01.mkv"...

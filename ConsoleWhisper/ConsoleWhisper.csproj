@@ -13,7 +13,7 @@
 
 	<PropertyGroup>
 		<AssemblyName>ConsoleWhisper</AssemblyName>
-		<Version>1.2.1</Version>
+		<Version>1.3.0</Version>
 		<Nullable>enable</Nullable>
 		<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 		<Authors>azhuge233</Authors>
@@ -37,12 +37,50 @@
     <PackageReference Include="Xabe.FFmpeg.Downloader" Version="6.1.1" />
   </ItemGroup>
 
+	<!-- GPU runtimes are pulled in only for a GPU build (-p:GpuSupport=true); a regular build stays
+	     exactly today's CPU one. Vulkan is Windows x64 only, so the Linux GPU build ships CUDA. -->
+	<ItemGroup>
+		<PackageReference Include="Whisper.net.Runtime.Cuda" Version="1.9.1" Condition="'$(GpuSupport.ToLowerInvariant())' == 'true'" />
+		<PackageReference Include="Whisper.net.Runtime.Vulkan" Version="1.9.1" Condition="'$(GpuSupport.ToLowerInvariant())' == 'true' and '$(RuntimeIdentifier)' == 'win-x64'" />
+	</ItemGroup>
+
 	<Target Name="CreateModelDirectoryAfterBuild" AfterTargets="Build">
 		<MakeDir Directories="$(OutDir)Model" />
 	</Target>
 
 	<Target Name="CreateModelDirectoryAfterPublish" AfterTargets="Publish">
 		<MakeDir Directories="$(PublishDir)Model" />
+	</Target>
+
+	<!-- The GPU packages ship natives for every platform they support, so a win-x64 GPU publish
+	     would otherwise carry linux/macOS/arm binaries too (~274MB). Keep only the natives this
+	     build's RID can load: the GPU packages stay a superset of the CPU one, nothing more. -->
+	<Target Name="PruneForeignRuntimes" AfterTargets="Publish" Condition="'$(GpuSupport.ToLowerInvariant())' == 'true'">
+		<!-- Pruning needs the target RID to know which natives to keep. Without one every directory
+		     would look foreign and be deleted, so refuse instead of shipping an empty package. -->
+		<Error Condition="'$(RuntimeIdentifier)' == ''" Text="A GpuSupport publish requires a RuntimeIdentifier (-r); the runtime pruning has nothing to keep otherwise." />
+
+		<PropertyGroup>
+			<PublishedRuntimesDir>$([System.IO.Path]::Combine('$(PublishDir)', 'runtimes'))</PublishedRuntimesDir>
+			<PublishedCudaDir>$([System.IO.Path]::Combine('$(PublishedRuntimesDir)', 'cuda'))</PublishedCudaDir>
+			<PublishedVulkanDir>$([System.IO.Path]::Combine('$(PublishedRuntimesDir)', 'vulkan'))</PublishedVulkanDir>
+			<PublishedMetalFile>$([System.IO.Path]::Combine('$(PublishDir)', 'ggml-metal.metal'))</PublishedMetalFile>
+		</PropertyGroup>
+
+		<ItemGroup Condition="Exists('$(PublishedRuntimesDir)')">
+			<!-- Depth 1: the plain RID directories (runtimes/win-x64) next to the backend ones.
+			     Comparing %(Filename) relies on RID directory names carrying no dot. -->
+			<PublishedRuntimeDir Include="$([System.IO.Directory]::GetDirectories('$(PublishedRuntimesDir)'))" />
+			<ForeignRuntimeDir Include="@(PublishedRuntimeDir)" Condition="'%(PublishedRuntimeDir.Filename)' != '$(RuntimeIdentifier)' and '%(PublishedRuntimeDir.Filename)' != 'cuda' and '%(PublishedRuntimeDir.Filename)' != 'vulkan'" />
+
+			<!-- Depth 2: the RID directories inside the CUDA / Vulkan backends. -->
+			<PublishedBackendDir Include="$([System.IO.Directory]::GetDirectories('$(PublishedCudaDir)'))" Condition="Exists('$(PublishedCudaDir)')" />
+			<PublishedBackendDir Include="$([System.IO.Directory]::GetDirectories('$(PublishedVulkanDir)'))" Condition="Exists('$(PublishedVulkanDir)')" />
+			<ForeignRuntimeDir Include="@(PublishedBackendDir)" Condition="'%(PublishedBackendDir.Filename)' != '$(RuntimeIdentifier)'" />
+		</ItemGroup>
+
+		<RemoveDir Directories="@(ForeignRuntimeDir)" />
+		<Delete Files="$(PublishedMetalFile)" Condition="Exists('$(PublishedMetalFile)')" />
 	</Target>
 
 </Project>

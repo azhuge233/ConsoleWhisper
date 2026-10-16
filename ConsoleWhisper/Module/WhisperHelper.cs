@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Whisper.net;
 using Whisper.net.Ggml;
+using Whisper.net.LibraryLoader;
 
 namespace ConsoleWhisper.Module {
 	internal class WhisperHelper {
@@ -72,6 +73,23 @@ namespace ConsoleWhisper.Module {
 			File.Move(tempPath, modelPath, true);
 		}
 
+		/// <summary>
+		/// Names the native library that was actually loaded. whisper.net silently falls back to the
+		/// CPU runtime when a GPU one cannot be loaded, so the name must be reported as it is.
+		/// </summary>
+		internal static string FormatRuntimeName(RuntimeLibrary? loadedLibrary) {
+			return loadedLibrary?.ToString() ?? NotLoadedLibraryName;
+		}
+
+		/// <summary>
+		/// Reports the backend of the already loaded runtime - "not loaded" while no library was
+		/// loaded at all (--only-extract never loads one).
+		/// </summary>
+		internal static string DescribeRuntime() {
+			return FormatRuntimeName(RuntimeOptions.LoadedLibrary);
+		}
+
+		private const string NotLoadedLibraryName = "not loaded";
 		private const int DownloadBufferSize = 1024 * 1024;
 
 		private static readonly Dictionary<string, GgmlType> ModelTypeMap = new() {
