@@ -7,6 +7,7 @@ on:
     paths-ignore:
       - '**/**.md'
       - '.github/**'
+    tags: [ 'v*' ]
 
 jobs:
   build-test:
@@ -35,7 +36,10 @@ jobs:
 
   publish:
     name: Publish the app
+    # Releases are cut from version tags only (v<version>, matching <Version> in the csproj);
+    # a plain master push runs the gate above and stops there.
     needs: build-test
+    if: github.ref_type == 'tag'
     runs-on: windows-latest
     permissions:
       contents: write
@@ -43,12 +47,28 @@ jobs:
     steps:
     - name: Checkout source code
       uses: actions/checkout@v5
-    
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
       with:
         dotnet-version: 10.0.x
-    
+
+    - name: Check the tag against the project version
+      shell: pwsh
+      run: |
+        $tag = $env:GITHUB_REF_NAME
+        if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
+          throw "Tag '$tag' is not of the form v<major>.<minor>.<patch>"
+        }
+
+        $version = $tag.Substring(1)
+        $declared = (dotnet msbuild ConsoleWhisper/ConsoleWhisper.csproj -getProperty:Version).Trim()
+        if ($declared -ne $version) {
+          throw "Tag '$tag' does not match <Version>$declared</Version> in ConsoleWhisper.csproj"
+        }
+
+        Write-Host "Tag $tag matches version $version."
+
     - name: Publish
       shell: pwsh
       run: |
@@ -97,30 +117,43 @@ jobs:
         if ($packages.Count -ne 5) {
           throw "Expected 5 packages, found $($packages.Count): $($packages.Name -join ', ')"
         }
+
+    - name: Extract release notes
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = "Stop"
+
+        $version = $env:GITHUB_REF_NAME.Substring(1)
+        $changelog = Get-Content CHANGELOG.md -Raw
+
+        # Take the section "## [<version>] ..." up to the next top level heading; a missing section
+        # must fail the job rather than ship a release without notes.
+        $pattern = "(?ms)^## \[$([regex]::Escape($version))\][^\n]*\n(.*?)(?=^## |\z)"
+        $match = [regex]::Match($changelog, $pattern)
+        if (-not $match.Success) {
+          throw "CHANGELOG.md has no section for version $version"
+        }
+
+        $footer = @'
         
-    - name: Recreate Latest Release
+        ---
+        
+        GPU packages need an NVIDIA GPU plus the CUDA Toolkit >= 13.0.1 (the Runtime component alone is enough) or any Vulkan-capable driver; the backend that actually ran is printed as a `Runtime:` line at startup. See the README for details.
+        '@
+
+        Set-Content -Path release-notes.md -Value ($match.Groups[1].Value.Trim() + "`n" + $footer) -Encoding utf8
+        Write-Host "Release notes for $version:"
+        Get-Content release-notes.md
+
+    - name: Create Release
       shell: pwsh
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
         $ErrorActionPreference = "Stop"
 
-        Write-Host "Deleting existing Release..."
-
-        try {
-          gh release delete latest --yes --cleanup-tag
-        }
-        catch {
-          Write-Host "Release 'latest' does not exist."
-        }
-
-        git tag -d latest 2>$null
-
-        Write-Host "Creating new Release..."
-
-        gh release create latest `
-          *.zip `
-          --target $env:GITHUB_SHA `
-          --title "Latest" `
-          --notes "Windows: CW-win-x64.zip (CPU) and CW-win-x64-gpu.zip (GPU: the CUDA backend needs an NVIDIA GPU plus a CUDA Toolkit >= 13.0.1, Vulkan works with any Vulkan capable driver, otherwise it falls back to the CPU runtime). Linux: CW-linux-x64.zip (CPU) and CW-linux-x64-gpu.zip (GPU, built but not verified on hardware). macOS: CW-osx-x64.zip (CPU; Apple Silicon runs on Metal through the default runtime). The backend that actually ran is printed as a 'Runtime:' line at startup. With --multithread, several files are transcribed in parallel on a GPU backend (see the README)." `
-          --latest
+        # One release per tag, never deleted - this is what keeps every version's notes and
+        # packages downloadable; GitHub flags the newest release as Latest automatically.
+        gh release create "$env:GITHUB_REF_NAME" *.zip `
+          --title "$env:GITHUB_REF_NAME" `
+          --notes-file release-notes.md
